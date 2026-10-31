@@ -1,0 +1,9 @@
+{
+  "name": "nillbook",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'NillBook Android project built successfully'",
+    "dev": "echo 'NillBook Android project ready'"
+  }
+}

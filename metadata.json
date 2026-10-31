@@ -1,0 +1,8 @@
+{
+  "name": "NillBook",
+  "description": "Community-powered caller directory and smart contact manager for Bangladesh and international numbers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
