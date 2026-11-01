@@ -38,6 +38,7 @@ fun SearchScreen(
     onAddContactDirectly: (name: String, phone: String) -> Unit,
     onOpenChat: ((phone: String, name: String) -> Unit)? = null,
     onViewProfile: ((userId: String) -> Unit)? = null,
+    onTriggerCall: ((name: String, phone: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -312,9 +313,13 @@ fun SearchScreen(
                 },
                 onCall = {
                     if (result.numberVisible && !result.number.contains("•")) {
-                        NillBookRepository.recordCall(result.name, result.number)
-                        val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${result.number}"))
-                        context.startActivity(dialIntent)
+                        if (onTriggerCall != null) {
+                            onTriggerCall(result.name, result.number)
+                        } else {
+                            NillBookRepository.recordCall(result.name, result.number)
+                            val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${result.number}"))
+                            context.startActivity(dialIntent)
+                        }
                     }
                 },
                 onMessage = {

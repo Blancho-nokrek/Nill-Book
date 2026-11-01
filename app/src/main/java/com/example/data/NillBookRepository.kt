@@ -7,6 +7,68 @@ import java.util.UUID
 
 object NillBookRepository {
 
+    // Online / Offline Dual Mode State
+    private val _isOnline = MutableStateFlow(true)
+    val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+
+    // Shared message draft preserved across Online <-> Offline mode switching
+    private val _activeDraftText = MutableStateFlow("")
+    val activeDraftText: StateFlow<String> = _activeDraftText.asStateFlow()
+
+    fun setActiveDraft(draft: String) {
+        _activeDraftText.value = draft
+    }
+
+    // Pending Sync Queue for items created offline
+    private val _pendingSyncItems = MutableStateFlow<List<PendingSyncItem>>(
+        listOf(
+            PendingSyncItem(
+                id = "sync_1",
+                type = SyncItemType.MESSAGE,
+                title = "Queued message to Rahim Bhai",
+                subtitle = "\"Need to check the schedule...\"",
+                timestamp = "Today, 10:15 AM",
+                payload = "Need to check the schedule..."
+            ),
+            PendingSyncItem(
+                id = "sync_2",
+                type = SyncItemType.CONTACT,
+                title = "Local contact: Anisur Rahman",
+                subtitle = "Phone: +8801711223344",
+                timestamp = "Today, 09:30 AM",
+                payload = "+8801711223344"
+            )
+        )
+    )
+    val pendingSyncItems: StateFlow<List<PendingSyncItem>> = _pendingSyncItems.asStateFlow()
+
+    fun addPendingSyncItem(item: PendingSyncItem) {
+        _pendingSyncItems.value = listOf(item) + _pendingSyncItems.value
+    }
+
+    fun removePendingSyncItem(id: String) {
+        _pendingSyncItems.value = _pendingSyncItems.value.filter { it.id != id }
+    }
+
+    fun setOnlineMode(online: Boolean) {
+        _isOnline.value = online
+        if (online) {
+            syncOfflineData()
+        }
+    }
+
+    fun toggleOnlineMode() {
+        setOnlineMode(!_isOnline.value)
+    }
+
+    // Active Call State (for In-App Real-Time Call Screen)
+    private val _activeCallState = MutableStateFlow<ActiveCallState?>(null)
+    val activeCallState: StateFlow<ActiveCallState?> = _activeCallState.asStateFlow()
+
+    // Blocked users set
+    private val _blockedUsers = MutableStateFlow<Set<String>>(setOf())
+    val blockedUsers: StateFlow<Set<String>> = _blockedUsers.asStateFlow()
+
     // Current logged-in user
     private val _currentUser = MutableStateFlow<User?>(
         User(
@@ -14,100 +76,125 @@ object NillBookRepository {
             name = "Blancho Nokrek",
             email = "blancho@example.com",
             phone = "+8801712345678",
+            username = "blancho_n",
             gender = "Male",
             birthday = "1998-06-20",
+            bio = "Connecting on NILLBOOK caller directory.",
+            about = "Senior communicator & tech enthusiast. Active in Bangladesh and international caller communities.",
+            location = "Dhaka, Bangladesh",
             showNumberPublic = false,
+            presence = UserPresence.ONLINE,
+            lastSeen = "Online now",
+            twoFactorEnabled = true,
             createdAt = "2024-01-10"
         )
     )
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
-    // Global registered users
+    // Global registered directory users
     private val registeredUsers = mutableListOf(
         User(
             id = "user_me",
             name = "Blancho Nokrek",
             email = "blancho@example.com",
             phone = "+8801712345678",
+            username = "blancho_n",
             gender = "Male",
             birthday = "1998-06-20",
-            showNumberPublic = false
+            showNumberPublic = false,
+            presence = UserPresence.ONLINE
         ),
         User(
             id = "user_rahim",
             name = "Rahim Bhai",
             email = "rahim@example.com",
             phone = "+8801700000000",
+            username = "rahim_bhai",
             gender = "Male",
             birthday = "1988-04-12",
-            showNumberPublic = false
+            showNumberPublic = false,
+            presence = UserPresence.ONLINE
         ),
         User(
             id = "user_farhana",
             name = "Farhana Akter",
             email = "farhana@example.com",
             phone = "+8801819876543",
+            username = "farhana_a",
             gender = "Female",
             birthday = "1994-09-24",
-            showNumberPublic = true
+            showNumberPublic = true,
+            presence = UserPresence.ONLINE
         ),
         User(
             id = "user_tanvir",
             name = "Tanvir Ahmed",
             email = "tanvir@example.com",
             phone = "+8801912334455",
+            username = "tanvir_ahmed",
             gender = "Male",
             birthday = "1992-11-05",
-            showNumberPublic = false
+            showNumberPublic = false,
+            presence = UserPresence.AWAY
         ),
         User(
             id = "user_amit",
             name = "Amit Sharma",
             email = "amit@example.com",
             phone = "+919876543210",
+            username = "amit_sharma",
             gender = "Male",
             birthday = "1990-03-18",
-            showNumberPublic = true
+            showNumberPublic = true,
+            presence = UserPresence.OFFLINE
         ),
         User(
             id = "user_sarah",
             name = "Sarah Khan",
             email = "sarah@example.com",
             phone = "+923001234567",
+            username = "sarah_khan",
             gender = "Female",
             birthday = "1996-07-30",
-            showNumberPublic = false
+            showNumberPublic = false,
+            presence = UserPresence.ONLINE
         ),
         User(
             id = "user_nafis",
             name = "Nafis Iqbal",
             email = "nafis@example.com",
             phone = "+8801723456789",
+            username = "nafis_iqbal",
             gender = "Male",
             birthday = "1997-03-12",
-            showNumberPublic = false
+            showNumberPublic = false,
+            presence = UserPresence.ONLINE
         ),
         User(
             id = "user_tasnim",
             name = "Tasnim Jahan",
             email = "tasnim@example.com",
             phone = "+8801834567890",
+            username = "tasnim_j",
             gender = "Female",
             birthday = "1999-11-20",
-            showNumberPublic = true
+            showNumberPublic = true,
+            presence = UserPresence.ONLINE
         ),
         User(
             id = "user_mehedi",
             name = "Mehedi Hasan",
             email = "mehedi@example.com",
             phone = "+8801512345678",
+            username = "mehedi_h",
             gender = "Male",
             birthday = "1993-05-15",
-            showNumberPublic = false
+            showNumberPublic = false,
+            presence = UserPresence.OFFLINE
         )
     )
 
-    // Community crowdsourced phonebook saved names (maps Phone E164 -> list of names saved by different people)
+    // Community crowdsourced phonebook saved names
     private val crowdsourcedNames = mutableListOf(
         CrowdsourcedEntry("+8801700000000", "Rahim Bhai", 4),
         CrowdsourcedEntry("+8801700000000", "Rahim Mistri", 2),
@@ -121,42 +208,75 @@ object NillBookRepository {
         CrowdsourcedEntry("+12025550143", "Emily Watson Washington", 12)
     )
 
-    // User's private saved contacts
+    // User's private saved contacts with groups, favorites, and dual-mode sync status
     private val _userContacts = MutableStateFlow<List<Contact>>(
         listOf(
             Contact(
                 id = "c1",
                 name = "Rahim Bhai",
                 phone = "+8801700000000",
+                secondaryPhone = "+8801711000000",
                 email = "rahim@bhai.com",
                 address = "Dhanmondi, Dhaka",
-                birthday = "1988-04-12"
+                birthday = "1988-04-12",
+                isFavorite = true,
+                group = ContactGroup.FAMILY,
+                isRegisteredOnNillBook = true,
+                isOnline = true,
+                syncStatus = SyncStatus.SYNCED
             ),
             Contact(
                 id = "c2",
                 name = "Farhana Akter",
                 phone = "+8801819876543",
+                secondaryPhone = null,
                 email = "farhana.akter@gmail.com",
                 address = "Gulshan-1, Dhaka",
-                birthday = "1994-09-24"
+                birthday = "1994-09-24",
+                isFavorite = true,
+                group = ContactGroup.FRIENDS,
+                isRegisteredOnNillBook = true,
+                isOnline = true,
+                syncStatus = SyncStatus.SYNCED
             ),
             Contact(
                 id = "c3",
                 name = "Dr. Kamal Hossain",
                 phone = "+8801555667788",
+                secondaryPhone = null,
                 email = "dr.kamal@apollohospital.org",
                 address = "Apollo Hospital, Bashundhara",
-                birthday = "1975-08-10"
+                birthday = "1975-08-10",
+                isFavorite = false,
+                group = ContactGroup.WORK,
+                isRegisteredOnNillBook = false,
+                isOnline = false,
+                syncStatus = SyncStatus.SYNCED
+            ),
+            Contact(
+                id = "c4",
+                name = "Tanvir Ahmed",
+                phone = "+8801912334455",
+                secondaryPhone = null,
+                email = "tanvir@tech.com",
+                address = "Banani, Dhaka",
+                birthday = "1992-11-05",
+                isFavorite = false,
+                group = ContactGroup.FRIENDS,
+                isRegisteredOnNillBook = true,
+                isOnline = false,
+                syncStatus = SyncStatus.SYNCED
             )
         )
     )
     val userContacts: StateFlow<List<Contact>> = _userContacts.asStateFlow()
 
-    // Friendships: requesterId to addresseeId with status ("friends", "pending_in", "pending_out")
+    // Friendships: requesterId to addresseeId with status ("ACCEPTED", "PENDING")
     private val _friendships = MutableStateFlow<List<FriendshipEntry>>(
         listOf(
             FriendshipEntry("f1", "user_farhana", "user_me", "ACCEPTED"),
-            FriendshipEntry("f2", "user_tanvir", "user_me", "PENDING")
+            FriendshipEntry("f2", "user_tanvir", "user_me", "PENDING"),
+            FriendshipEntry("f3", "user_me", "user_rahim", "ACCEPTED")
         )
     )
     val friendships: StateFlow<List<FriendshipEntry>> = _friendships.asStateFlow()
@@ -177,7 +297,6 @@ object NillBookRepository {
             _currentUser.value = user
             return true
         }
-        // If not found in seed, create account on the fly for ease of use
         val isEmail = trimmed.contains("@")
         val newUser = User(
             id = "user_${UUID.randomUUID().toString().take(8)}",
@@ -210,6 +329,13 @@ object NillBookRepository {
         _currentUser.value = null
     }
 
+    fun deleteAccount() {
+        val currentId = _currentUser.value?.id ?: return
+        registeredUsers.removeAll { it.id == currentId }
+        _friendships.value = _friendships.value.filterNot { it.requesterId == currentId || it.addresseeId == currentId }
+        _currentUser.value = null
+    }
+
     fun updateProfile(
         name: String,
         phone: String,
@@ -217,16 +343,20 @@ object NillBookRepository {
         birthday: String,
         bio: String,
         location: String,
-        showPublic: Boolean
+        showPublic: Boolean,
+        about: String = "",
+        username: String = ""
     ) {
         val current = _currentUser.value ?: return
         val updated = current.copy(
-            name = name,
-            phone = phone,
+            name = name.trim(),
+            phone = phone.trim(),
             gender = gender,
             birthday = birthday,
-            bio = bio,
-            location = location,
+            bio = bio.trim(),
+            about = if (about.isNotBlank()) about.trim() else current.about,
+            username = if (username.isNotBlank()) username.trim() else current.username,
+            location = location.trim(),
             showNumberPublic = showPublic
         )
         _currentUser.value = updated
@@ -246,6 +376,16 @@ object NillBookRepository {
         }
     }
 
+    fun updateCoverPhoto(coverUri: String) {
+        val current = _currentUser.value ?: return
+        val updated = current.copy(coverPhoto = coverUri)
+        _currentUser.value = updated
+        val idx = registeredUsers.indexOfFirst { it.id == current.id }
+        if (idx != -1) {
+            registeredUsers[idx] = updated
+        }
+    }
+
     fun getUserById(userId: String): User? {
         if (_currentUser.value?.id == userId) return _currentUser.value
         return registeredUsers.find { it.id == userId }
@@ -258,22 +398,38 @@ object NillBookRepository {
     }
 
     // Contact Operations
-    fun addContact(name: String, phone: String, email: String?, address: String?, birthday: String?): Boolean {
+    fun addContact(
+        name: String,
+        phone: String,
+        email: String? = null,
+        address: String? = null,
+        birthday: String? = null,
+        secondaryPhone: String? = null,
+        group: ContactGroup = ContactGroup.ALL,
+        isFavorite: Boolean = false
+    ): Boolean {
         val current = _userContacts.value
         if (current.any { it.phone == phone }) {
-            return false // duplicate
+            return false // duplicate phone
         }
+        val isRegistered = registeredUsers.any { it.phone == phone }
         val newContact = Contact(
             id = UUID.randomUUID().toString(),
             name = name.trim(),
             phone = phone.trim(),
+            secondaryPhone = secondaryPhone?.trim()?.ifEmpty { null },
             email = email?.trim()?.ifEmpty { null },
             address = address?.trim()?.ifEmpty { null },
-            birthday = birthday?.trim()?.ifEmpty { null }
+            birthday = birthday?.trim()?.ifEmpty { null },
+            isFavorite = isFavorite,
+            group = group,
+            isRegisteredOnNillBook = isRegistered,
+            isOnline = isRegistered,
+            syncStatus = if (_isOnline.value) SyncStatus.SYNCED else SyncStatus.PENDING_SYNC
         )
         _userContacts.value = (current + newContact).sortedBy { it.name.lowercase() }
 
-        // Also contribute to community crowdsource directory
+        // Contribute to community crowdsourced directory
         val existingCrowd = crowdsourcedNames.find { it.phone == phone && it.name.equals(name, ignoreCase = true) }
         if (existingCrowd != null) {
             existingCrowd.count++
@@ -283,25 +439,66 @@ object NillBookRepository {
         return true
     }
 
-    fun updateContact(id: String, name: String, phone: String, email: String?, address: String?, birthday: String?): Boolean {
+    fun updateContact(
+        id: String,
+        name: String,
+        phone: String,
+        email: String?,
+        address: String?,
+        birthday: String?,
+        secondaryPhone: String? = null,
+        group: ContactGroup = ContactGroup.ALL,
+        isFavorite: Boolean = false
+    ): Boolean {
         val current = _userContacts.value
         val existing = current.find { it.id == id } ?: return false
         if (phone != existing.phone && current.any { it.phone == phone && it.id != id }) {
             return false
         }
+        val isRegistered = registeredUsers.any { it.phone == phone }
         val updated = existing.copy(
             name = name.trim(),
             phone = phone.trim(),
+            secondaryPhone = secondaryPhone?.trim()?.ifEmpty { null },
             email = email?.trim()?.ifEmpty { null },
             address = address?.trim()?.ifEmpty { null },
-            birthday = birthday?.trim()?.ifEmpty { null }
+            birthday = birthday?.trim()?.ifEmpty { null },
+            group = group,
+            isFavorite = isFavorite,
+            isRegisteredOnNillBook = isRegistered,
+            isOnline = isRegistered,
+            syncStatus = if (_isOnline.value) SyncStatus.SYNCED else SyncStatus.PENDING_SYNC
         )
         _userContacts.value = current.map { if (it.id == id) updated else it }.sortedBy { it.name.lowercase() }
         return true
     }
 
+    fun toggleFavorite(id: String) {
+        val current = _userContacts.value
+        _userContacts.value = current.map {
+            if (it.id == id) it.copy(isFavorite = !it.isFavorite) else it
+        }
+    }
+
+    fun setContactGroup(id: String, group: ContactGroup) {
+        val current = _userContacts.value
+        _userContacts.value = current.map {
+            if (it.id == id) it.copy(group = group) else it
+        }
+    }
+
     fun deleteContact(id: String) {
         _userContacts.value = _userContacts.value.filter { it.id != id }
+    }
+
+    fun importDeviceContacts(deviceContacts: List<Contact>): Int {
+        var added = 0
+        for (c in deviceContacts) {
+            if (addContact(c.name, c.phone, c.email, c.address, c.birthday)) {
+                added++
+            }
+        }
+        return added
     }
 
     fun importVcf(vcfText: String, country: String): Int {
@@ -315,6 +512,43 @@ object NillBookRepository {
         return added
     }
 
+    // Duplicate detection and merging
+    fun findDuplicateContacts(): List<Pair<Contact, Contact>> {
+        val list = _userContacts.value
+        val duplicates = mutableListOf<Pair<Contact, Contact>>()
+        for (i in 0 until list.size) {
+            for (j in i + 1 until list.size) {
+                val c1 = list[i]
+                val c2 = list[j]
+                val sameName = c1.name.equals(c2.name, ignoreCase = true)
+                val samePhone = c1.phone == c2.phone || (c1.phone.endsWith(c2.phone.takeLast(8)) && c2.phone.length >= 8)
+                if (sameName || samePhone) {
+                    duplicates.add(Pair(c1, c2))
+                }
+            }
+        }
+        return duplicates
+    }
+
+    fun mergeContacts(primaryId: String, duplicateId: String): Boolean {
+        val current = _userContacts.value
+        val primary = current.find { it.id == primaryId } ?: return false
+        val duplicate = current.find { it.id == duplicateId } ?: return false
+
+        val merged = primary.copy(
+            secondaryPhone = primary.secondaryPhone ?: duplicate.phone.takeIf { it != primary.phone },
+            email = primary.email ?: duplicate.email,
+            address = primary.address ?: duplicate.address,
+            birthday = primary.birthday ?: duplicate.birthday,
+            isFavorite = primary.isFavorite || duplicate.isFavorite
+        )
+
+        _userContacts.value = current.filterNot { it.id == duplicateId }.map {
+            if (it.id == primaryId) merged else it
+        }
+        return true
+    }
+
     // Search Operations
     fun searchByNumber(query: String, country: String): SearchResult? {
         val me = _currentUser.value
@@ -322,7 +556,6 @@ object NillBookRepository {
         val e164 = PhoneUtils.toE164(query, country) ?: query.trim()
 
         val owner = registeredUsers.find { it.phone == e164 }
-        val savedByMe = _userContacts.value.any { it.phone == e164 }
         val friendStatus = getFriendStatus(meId, owner?.id)
 
         if (owner != null) {
@@ -333,11 +566,10 @@ object NillBookRepository {
                 registered = true,
                 userId = owner.id,
                 friendStatus = friendStatus,
-                numberVisible = true // typed the number directly
+                numberVisible = true
             )
         }
 
-        // Check crowdsourced names
         val matchingCrowd = crowdsourcedNames.filter { it.phone == e164 }
             .maxByOrNull { it.count }
         if (matchingCrowd != null) {
@@ -364,7 +596,6 @@ object NillBookRepository {
         val results = mutableListOf<SearchResult>()
         val seenKeys = mutableSetOf<String>()
 
-        // 1. Search registered users
         for (u in registeredUsers) {
             val score = FuzzyMatcher.matchScore(q, u.name)
             if (score > 0) {
@@ -386,7 +617,6 @@ object NillBookRepository {
             }
         }
 
-        // 2. Search crowdsourced entries
         for (entry in crowdsourcedNames) {
             val key = "${entry.phone}|${entry.name}"
             if (seenKeys.contains(key)) continue
@@ -416,7 +646,7 @@ object NillBookRepository {
     }
 
     // Friend Management
-    private fun getFriendStatus(meId: String?, otherId: String?): String {
+    fun getFriendStatus(meId: String?, otherId: String?): String {
         if (meId == null || otherId == null) return "none"
         if (meId == otherId) return "self"
         val relation = _friendships.value.find {
@@ -470,6 +700,14 @@ object NillBookRepository {
         }
     }
 
+    fun blockUser(phoneOrId: String) {
+        _blockedUsers.value = _blockedUsers.value + phoneOrId
+    }
+
+    fun unblockUser(phoneOrId: String) {
+        _blockedUsers.value = _blockedUsers.value - phoneOrId
+    }
+
     fun getFriendsList(): List<FriendItem> {
         val me = _currentUser.value ?: return emptyList()
         val list = mutableListOf<FriendItem>()
@@ -484,7 +722,9 @@ object NillBookRepository {
                         name = targetUser.name,
                         phone = phoneToShow,
                         requestId = f.id,
-                        status = status
+                        status = status,
+                        isOnline = targetUser.presence == UserPresence.ONLINE,
+                        lastSeen = targetUser.lastSeen
                     )
                 )
             } else if (f.addresseeId == me.id) {
@@ -497,7 +737,9 @@ object NillBookRepository {
                         name = targetUser.name,
                         phone = phoneToShow,
                         requestId = f.id,
-                        status = status
+                        status = status,
+                        isOnline = targetUser.presence == UserPresence.ONLINE,
+                        lastSeen = targetUser.lastSeen
                     )
                 )
             }
@@ -523,12 +765,13 @@ object NillBookRepository {
                         "user_tasnim" -> 2
                         else -> 1
                     },
-                    phone = PhoneUtils.maskNumber(u.phone)
+                    phone = PhoneUtils.maskNumber(u.phone),
+                    isOnline = u.presence == UserPresence.ONLINE
                 )
             }
     }
 
-    // WhatsApp-style Chat Conversations
+    // Conversations & Smart 3-Option Messaging (Internet, SMS, MMS)
     private val _conversations = MutableStateFlow<List<ChatConversation>>(
         listOf(
             ChatConversation(
@@ -538,9 +781,25 @@ object NillBookRepository {
                 lastMessage = "Assalamu Alaikum bhai, kemon achhen?",
                 lastTimestamp = "10:45 AM",
                 unreadCount = 1,
+                isPinned = true,
+                isOnline = true,
                 messages = listOf(
-                    ChatMessage("m1", "Hello Rahim bhai", "10:30 AM", isFromMe = true),
-                    ChatMessage("m2", "Assalamu Alaikum bhai, kemon achhen?", "10:45 AM", isFromMe = false)
+                    ChatMessage(
+                        id = "m1",
+                        text = "Hello Rahim bhai",
+                        timestamp = "10:30 AM",
+                        isFromMe = true,
+                        channel = MessageChannel.INTERNET,
+                        status = MessageDeliveryStatus.READ
+                    ),
+                    ChatMessage(
+                        id = "m2",
+                        text = "Assalamu Alaikum bhai, kemon achhen?",
+                        timestamp = "10:45 AM",
+                        isFromMe = false,
+                        channel = MessageChannel.INTERNET,
+                        status = MessageDeliveryStatus.READ
+                    )
                 )
             ),
             ChatConversation(
@@ -550,42 +809,90 @@ object NillBookRepository {
                 lastMessage = "Got your number from NILLBOOK!",
                 lastTimestamp = "Yesterday",
                 unreadCount = 0,
+                isPinned = false,
+                isOnline = true,
                 messages = listOf(
-                    ChatMessage("m3", "Hi! Are you on NillBook?", "Yesterday 4:10 PM", isFromMe = true),
-                    ChatMessage("m4", "Yes, got your number from NILLBOOK!", "Yesterday 4:15 PM", isFromMe = false)
+                    ChatMessage(
+                        id = "m3",
+                        text = "Hi! Are you on NillBook?",
+                        timestamp = "Yesterday 4:10 PM",
+                        isFromMe = true,
+                        channel = MessageChannel.INTERNET,
+                        status = MessageDeliveryStatus.READ
+                    ),
+                    ChatMessage(
+                        id = "m4",
+                        text = "Yes, got your number from NILLBOOK!",
+                        timestamp = "Yesterday 4:15 PM",
+                        isFromMe = false,
+                        channel = MessageChannel.INTERNET,
+                        status = MessageDeliveryStatus.READ
+                    )
                 )
             ),
             ChatConversation(
                 id = "conv_tanvir",
                 contactName = "Tanvir Ahmed",
                 phone = "+8801912334455",
-                lastMessage = "Let's connect this weekend",
+                lastMessage = "Sent via Carrier SMS",
                 lastTimestamp = "Oct 28",
                 unreadCount = 0,
+                isPinned = false,
+                isOnline = false,
                 messages = listOf(
-                    ChatMessage("m5", "Hey Tanvir, let's connect this weekend", "Oct 28 2:00 PM", isFromMe = true)
+                    ChatMessage(
+                        id = "m5",
+                        text = "Hey Tanvir, let's connect this weekend",
+                        timestamp = "Oct 28 2:00 PM",
+                        isFromMe = true,
+                        channel = MessageChannel.SMS,
+                        status = MessageDeliveryStatus.DELIVERED
+                    )
                 )
             )
         )
     )
     val conversations: StateFlow<List<ChatConversation>> = _conversations.asStateFlow()
 
-    fun sendMessage(phone: String, contactName: String, text: String) {
+    fun sendMessage(
+        phone: String,
+        contactName: String,
+        text: String,
+        channel: MessageChannel = if (_isOnline.value) MessageChannel.INTERNET else MessageChannel.SMS,
+        attachmentUrl: String? = null,
+        attachmentType: String? = null,
+        audioDuration: Int? = null,
+        replyToText: String? = null
+    ) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
-        val current = _conversations.value.toMutableList()
-        val existingIndex = current.indexOfFirst { it.phone == phone }
+        if (trimmed.isEmpty() && attachmentUrl == null) return
+
+        val deliveryStatus = if (channel == MessageChannel.INTERNET) {
+            if (_isOnline.value) MessageDeliveryStatus.SENT else MessageDeliveryStatus.SENDING
+        } else {
+            MessageDeliveryStatus.SENT // SMS network dispatched
+        }
+
         val newMsg = ChatMessage(
             id = "msg_${UUID.randomUUID().toString().take(8)}",
-            text = trimmed,
+            text = if (trimmed.isEmpty() && attachmentType == "image") "📷 Photo attachment" else if (trimmed.isEmpty() && attachmentType == "audio") "🎤 Voice message (${audioDuration ?: 4}s)" else trimmed,
             timestamp = "Just now",
-            isFromMe = true
+            isFromMe = true,
+            channel = channel,
+            status = deliveryStatus,
+            attachmentUrl = attachmentUrl,
+            attachmentType = attachmentType,
+            audioDurationSeconds = audioDuration,
+            replyToText = replyToText
         )
+
+        val current = _conversations.value.toMutableList()
+        val existingIndex = current.indexOfFirst { it.phone == phone }
 
         if (existingIndex != -1) {
             val conv = current[existingIndex]
             current[existingIndex] = conv.copy(
-                lastMessage = trimmed,
+                lastMessage = newMsg.text,
                 lastTimestamp = "Just now",
                 messages = conv.messages + newMsg
             )
@@ -596,7 +903,7 @@ object NillBookRepository {
                     id = "conv_${UUID.randomUUID().toString().take(8)}",
                     contactName = contactName,
                     phone = phone,
-                    lastMessage = trimmed,
+                    lastMessage = newMsg.text,
                     lastTimestamp = "Just now",
                     unreadCount = 0,
                     messages = listOf(newMsg)
@@ -606,8 +913,79 @@ object NillBookRepository {
         _conversations.value = current
     }
 
-    fun getConversation(phone: String): ChatConversation? {
-        return _conversations.value.find { it.phone == phone }
+    fun editMessage(phone: String, messageId: String, newText: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            val conv = current[idx]
+            val updatedMessages = conv.messages.map {
+                if (it.id == messageId) it.copy(text = newText, isEdited = true) else it
+            }
+            current[idx] = conv.copy(messages = updatedMessages)
+            _conversations.value = current
+        }
+    }
+
+    fun deleteMessage(phone: String, messageId: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            val conv = current[idx]
+            val updatedMessages = conv.messages.filterNot { it.id == messageId }
+            current[idx] = conv.copy(
+                messages = updatedMessages,
+                lastMessage = updatedMessages.lastOrNull()?.text ?: "No messages"
+            )
+            _conversations.value = current
+        }
+    }
+
+    fun toggleReaction(phone: String, messageId: String, emoji: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            val conv = current[idx]
+            val updatedMessages = conv.messages.map { msg ->
+                if (msg.id == messageId) {
+                    val existingReaction = msg.reactions.find { it.emoji == emoji }
+                    val newReactions = if (existingReaction != null) {
+                        msg.reactions.filterNot { it.emoji == emoji }
+                    } else {
+                        msg.reactions + MessageReaction(emoji, 1)
+                    }
+                    msg.copy(reactions = newReactions)
+                } else msg
+            }
+            current[idx] = conv.copy(messages = updatedMessages)
+            _conversations.value = current
+        }
+    }
+
+    fun togglePinConversation(phone: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            current[idx] = current[idx].copy(isPinned = !current[idx].isPinned)
+            _conversations.value = current
+        }
+    }
+
+    fun toggleArchiveConversation(phone: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            current[idx] = current[idx].copy(isArchived = !current[idx].isArchived)
+            _conversations.value = current
+        }
+    }
+
+    fun toggleMuteConversation(phone: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            current[idx] = current[idx].copy(isMuted = !current[idx].isMuted)
+            _conversations.value = current
+        }
     }
 
     fun clearConversation(phone: String) {
@@ -619,26 +997,39 @@ object NillBookRepository {
         }
     }
 
-    // Call History Logs
+    fun deleteConversation(phone: String) {
+        _conversations.value = _conversations.value.filterNot { it.phone == phone }
+    }
+
+    // Call History Logs & Real-Time Call Simulation
     private val _callLogs = MutableStateFlow<List<CallLogEntry>>(
         listOf(
-            CallLogEntry("log_1", "Rahim Bhai", "+8801700000000", CallType.INCOMING, "Today, 11:42 AM", "2m 15s"),
-            CallLogEntry("log_2", "Farhana Akter", "+8801819876543", CallType.MISSED, "Today, 10:15 AM", ""),
-            CallLogEntry("log_3", "Dr. Kamal Hossain", "+8801555667788", CallType.OUTGOING, "Yesterday, 4:30 PM", "1m 05s"),
-            CallLogEntry("log_4", "Unknown Caller", "+8801912334455", CallType.MISSED, "Yesterday, 1:20 PM", ""),
-            CallLogEntry("log_5", "Shakib Al Hasan Fan Club", "+8801300998877", CallType.INCOMING, "Oct 29, 6:00 PM", "45s")
+            CallLogEntry("log_1", "Rahim Bhai", "+8801700000000", CallType.INCOMING, "Today, 11:42 AM", "2m 15s", CallMode.INTERNET_AUDIO, "Internet"),
+            CallLogEntry("log_2", "Farhana Akter", "+8801819876543", CallType.MISSED, "Today, 10:15 AM", "", CallMode.INTERNET_VIDEO, "Internet"),
+            CallLogEntry("log_3", "Dr. Kamal Hossain", "+8801555667788", CallType.OUTGOING, "Yesterday, 4:30 PM", "1m 05s", CallMode.SIM_CARRIER, "SIM 1"),
+            CallLogEntry("log_4", "Unknown Caller", "+8801912334455", CallType.MISSED, "Yesterday, 1:20 PM", "", CallMode.SIM_CARRIER, "SIM 2"),
+            CallLogEntry("log_5", "Shakib Al Hasan Fan Club", "+8801300998877", CallType.INCOMING, "Oct 29, 6:00 PM", "45s", CallMode.INTERNET_AUDIO, "Internet")
         )
     )
     val callLogs: StateFlow<List<CallLogEntry>> = _callLogs.asStateFlow()
 
-    fun recordCall(name: String, phone: String, type: CallType = CallType.OUTGOING) {
+    fun recordCall(
+        name: String,
+        phone: String,
+        type: CallType = CallType.OUTGOING,
+        mode: CallMode = CallMode.INTERNET_AUDIO,
+        simSlot: String = if (mode == CallMode.SIM_CARRIER) "SIM 1" else "Internet",
+        duration: String = if (type == CallType.MISSED) "" else "0m 30s"
+    ) {
         val newEntry = CallLogEntry(
             id = "log_${UUID.randomUUID().toString().take(8)}",
             name = name,
             phone = phone,
             type = type,
             timestamp = "Just now",
-            duration = if (type == CallType.MISSED) "" else "0m 10s"
+            duration = duration,
+            mode = mode,
+            simSlot = simSlot
         )
         _callLogs.value = listOf(newEntry) + _callLogs.value
     }
@@ -646,5 +1037,70 @@ object NillBookRepository {
     fun clearCallLogs() {
         _callLogs.value = emptyList()
     }
-}
 
+    // Interactive Real-Time Internet Call Controls
+    fun startInternetCall(name: String, phone: String, mode: CallMode) {
+        _activeCallState.value = ActiveCallState(
+            callId = UUID.randomUUID().toString(),
+            contactName = name,
+            phone = phone,
+            mode = mode,
+            isIncoming = false,
+            durationSeconds = 0,
+            isConnected = true
+        )
+    }
+
+    fun toggleCallMute() {
+        val cur = _activeCallState.value ?: return
+        _activeCallState.value = cur.copy(isMuted = !cur.isMuted)
+    }
+
+    fun toggleCallSpeaker() {
+        val cur = _activeCallState.value ?: return
+        _activeCallState.value = cur.copy(isSpeakerOn = !cur.isSpeakerOn)
+    }
+
+    fun toggleCallVideo() {
+        val cur = _activeCallState.value ?: return
+        _activeCallState.value = cur.copy(isVideoDisabled = !cur.isVideoDisabled)
+    }
+
+    fun endActiveCall() {
+        val cur = _activeCallState.value ?: return
+        recordCall(
+            name = cur.contactName,
+            phone = cur.phone,
+            type = CallType.OUTGOING,
+            mode = cur.mode,
+            simSlot = "Internet",
+            duration = "${cur.durationSeconds / 60}m ${cur.durationSeconds % 60}s"
+        )
+        _activeCallState.value = null
+    }
+
+    // Offline data synchronizer
+    fun syncOfflineData(): Int {
+        var syncedCount = _pendingSyncItems.value.size
+        _pendingSyncItems.value = emptyList()
+
+        // 1. Sync pending contacts
+        _userContacts.value = _userContacts.value.map {
+            if (it.syncStatus == SyncStatus.PENDING_SYNC) {
+                syncedCount++
+                it.copy(syncStatus = SyncStatus.SYNCED)
+            } else it
+        }
+        // 2. Sync pending messages
+        _conversations.value = _conversations.value.map { conv ->
+            val updatedMessages = conv.messages.map { msg ->
+                if (msg.status == MessageDeliveryStatus.SENDING) {
+                    syncedCount++
+                    msg.copy(status = MessageDeliveryStatus.SENT)
+                } else msg
+            }
+            conv.copy(messages = updatedMessages)
+        }
+        return syncedCount
+    }
+}

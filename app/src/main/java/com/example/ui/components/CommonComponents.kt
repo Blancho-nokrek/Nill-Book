@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -27,16 +25,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.*
+import com.example.data.LanguageManager
 import com.example.ui.theme.*
 
-import androidx.compose.material.icons.automirrored.filled.Chat
-
-enum class AppScreen(val title: String, val icon: ImageVector) {
-    SEARCH("Search", Icons.Default.Search),
-    MESSAGES("Chats", Icons.AutoMirrored.Filled.Chat),
-    FRIENDS("Friends", Icons.Default.Group),
-    CONTACTS("Contacts", Icons.Default.Contacts),
-    PROFILE("Profile", Icons.Default.Person)
+enum class AppScreen(val key: String, val icon: ImageVector) {
+    SEARCH("search", Icons.Default.Search),
+    MESSAGES("chats", Icons.AutoMirrored.Filled.Chat),
+    CONTACTS("contacts", Icons.Default.Contacts),
+    FRIENDS("friends", Icons.Default.Group),
+    CALLS("calls", Icons.Default.PhoneCallback),
+    PROFILE("profile", Icons.Default.Person)
 }
 
 @Composable
@@ -44,7 +43,11 @@ fun NillBookTopBar(
     currentScreen: AppScreen,
     userName: String,
     friendRequestsCount: Int,
+    isOnline: Boolean,
+    onToggleOnlineMode: () -> Unit,
     onProfileClick: () -> Unit,
+    onLanguageClick: (() -> Unit)? = null,
+    networkState: NetworkState? = null,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -57,10 +60,11 @@ fun NillBookTopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // Logo & Name
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.testTag("app_brand_logo")
@@ -77,49 +81,88 @@ fun NillBookTopBar(
                         Text(
                             text = "NILLBOOK",
                             color = Cyan400,
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = "CONNECT. IDENTIFY. MANAGE.",
+                            text = "SMART CALLER & MESSENGER",
                             color = Slate400,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.sp
                         )
                     }
                 }
 
-                // Profile Avatar icon button
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(if (currentScreen == AppScreen.PROFILE) Cyan400.copy(alpha = 0.2f) else Slate800)
-                        .border(
-                            width = 1.5.dp,
-                            color = if (currentScreen == AppScreen.PROFILE) Cyan400 else Slate700,
-                            shape = CircleShape
-                        )
-                        .clickable(onClick = onProfileClick)
-                        .testTag("topbar_profile_button"),
-                    contentAlignment = Alignment.Center
+                // Action Controls on Right: Online Mode Badge + Profile
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = userName.take(1).uppercase(),
-                        color = if (currentScreen == AppScreen.PROFILE) Cyan400 else Slate300,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                    if (friendRequestsCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(Cyan400)
+                    // Online / Offline Dual Mode Interactive Pill
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = onToggleOnlineMode)
+                            .testTag("toggle_online_mode_btn"),
+                        color = if (isOnline) Emerald950.copy(alpha = 0.7f) else Amber950.copy(alpha = 0.7f),
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(if (isOnline) Emerald400.copy(alpha = 0.5f) else Amber400.copy(alpha = 0.5f))
                         )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isOnline) Emerald400 else Amber400)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            val transportLabel = networkState?.transport?.displayName ?: "Wi-Fi"
+                            Text(
+                                text = if (isOnline) "ONLINE ($transportLabel)" else "OFFLINE (SIM Mode)",
+                                color = if (isOnline) Emerald400 else Amber400,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Profile Avatar icon button
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(if (currentScreen == AppScreen.PROFILE) Cyan400.copy(alpha = 0.2f) else Slate800)
+                            .border(
+                                width = 1.5.dp,
+                                color = if (currentScreen == AppScreen.PROFILE) Cyan400 else Slate700,
+                                shape = CircleShape
+                            )
+                            .clickable(onClick = onProfileClick)
+                            .testTag("topbar_profile_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = userName.take(1).uppercase(),
+                            color = if (currentScreen == AppScreen.PROFILE) Cyan400 else Slate300,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        if (friendRequestsCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(9.dp)
+                                    .clip(CircleShape)
+                                    .background(Cyan400)
+                            )
+                        }
                     }
                 }
             }
@@ -137,7 +180,13 @@ fun NillBookBottomBar(
     modifier: Modifier = Modifier
 ) {
     val bottomScreens = remember {
-        listOf(AppScreen.SEARCH, AppScreen.MESSAGES, AppScreen.FRIENDS, AppScreen.CONTACTS)
+        listOf(
+            AppScreen.SEARCH,
+            AppScreen.MESSAGES,
+            AppScreen.CONTACTS,
+            AppScreen.FRIENDS,
+            AppScreen.CALLS
+        )
     }
 
     NavigationBar(
@@ -150,6 +199,8 @@ fun NillBookBottomBar(
     ) {
         bottomScreens.forEach { screen ->
             val isSelected = currentScreen == screen
+            val label = LanguageManager.t(screen.key)
+
             NavigationBarItem(
                 selected = isSelected,
                 onClick = { onScreenSelected(screen) },
@@ -175,16 +226,17 @@ fun NillBookBottomBar(
                     ) {
                         Icon(
                             imageVector = screen.icon,
-                            contentDescription = screen.title,
-                            modifier = Modifier.size(24.dp)
+                            contentDescription = label,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 },
                 label = {
                     Text(
-                        text = screen.title,
+                        text = label,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 12.sp
+                        fontSize = 10.sp,
+                        maxLines = 1
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(

@@ -42,6 +42,7 @@ enum class FriendsTab {
 fun FriendsScreen(
     onOpenChat: ((phone: String, name: String) -> Unit)? = null,
     onViewProfile: ((userId: String) -> Unit)? = null,
+    onTriggerCall: ((name: String, phone: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -456,9 +457,13 @@ fun FriendsScreen(
                             onCall = {
                                 friend.phone?.let {
                                     if (!it.contains("•")) {
-                                        NillBookRepository.recordCall(friend.name, it, CallType.OUTGOING)
-                                        val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$it"))
-                                        context.startActivity(dialIntent)
+                                        if (onTriggerCall != null) {
+                                            onTriggerCall(friend.name, it)
+                                        } else {
+                                            NillBookRepository.recordCall(friend.name, it, CallType.OUTGOING)
+                                            val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$it"))
+                                            context.startActivity(dialIntent)
+                                        }
                                     }
                                 }
                             },

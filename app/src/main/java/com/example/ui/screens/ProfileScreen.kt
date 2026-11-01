@@ -33,6 +33,7 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.*
 import com.example.ui.components.ProfileAvatarPlaceholder
+import com.example.ui.components.SmartCallOptionDialog
 import com.example.ui.theme.*
 
 @Composable
@@ -46,8 +47,8 @@ fun ProfileScreen(
     val context = LocalContext.current
     val currentUser by NillBookRepository.currentUser.collectAsState()
     val friendships by NillBookRepository.friendships.collectAsState()
+    val isOnline by NillBookRepository.isOnline.collectAsState()
 
-    // Determine if this is own profile or another person's profile
     val isOwnProfile = remember(targetUserId, currentUser) {
         targetUserId == null || targetUserId == currentUser?.id
     }
@@ -66,7 +67,6 @@ fun ProfileScreen(
         }
     }
 
-    // Friend relationship with displayed user
     val friendshipStatus = remember(displayedUser, currentUser, friendships) {
         if (displayedUser == null || currentUser == null || isOwnProfile) "none"
         else {
@@ -87,9 +87,10 @@ fun ProfileScreen(
 
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountConfirm by remember { mutableStateOf(false) }
+    var callDialogTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
 
-    // Modern Zero-Permission Photo Picker
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
@@ -99,8 +100,13 @@ fun ProfileScreen(
         }
     }
 
-    val friendCount = remember(friendships) {
-        friendships.count { it.status == "ACCEPTED" }
+    val coverPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            NillBookRepository.updateCoverPhoto(uri.toString())
+            toastMessage = "Cover photo updated!"
+        }
     }
 
     LazyColumn(
@@ -111,7 +117,7 @@ fun ProfileScreen(
         contentPadding = PaddingValues(top = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header: Title on Left, Settings on Far Right for My Profile
+        // Top Header
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -132,7 +138,7 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                     }
                     Text(
-                        text = if (isOwnProfile) "My Profile" else "Caller Profile",
+                        text = if (isOwnProfile) LanguageManager.t("profile") else "Caller Profile",
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -161,7 +167,6 @@ fun ProfileScreen(
         }
 
         if (displayedUser == null) {
-            // Not signed in state
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -189,27 +194,23 @@ fun ProfileScreen(
         } else {
             val u = displayedUser
 
-            // Status feedback banner
-            if (toastMessage != null) {
+            toastMessage?.let { msg ->
                 item {
                     Surface(
                         color = Slate900,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Cyan400, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(toastMessage ?: "", color = Slate200, fontSize = 13.sp)
+                            Text(msg, color = Slate200, fontSize = 13.sp)
                         }
                     }
                 }
             }
 
-            // Beautiful Profile Card Header with Photo Upload & Cover
+            // Profile Card Header with Cover & Avatar
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -221,7 +222,7 @@ fun ProfileScreen(
                         modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Avatar with Photo Upload badge (if own profile) or Photo
+                        // Avatar
                         Box(contentAlignment = Alignment.BottomEnd) {
                             ProfileAvatarPlaceholder(
                                 name = u.name,
@@ -232,7 +233,6 @@ fun ProfileScreen(
                                     .border(2.5.dp, Cyan400, CircleShape)
                             )
 
-                            // Profile picture upload button for own profile
                             if (isOwnProfile) {
                                 Box(
                                     modifier = Modifier
@@ -279,7 +279,6 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Phone Number (Masked or Unmasked)
                         val phoneToDisplay = remember(u, isOwnProfile, friendshipStatus) {
                             if (isOwnProfile || u.showNumberPublic || friendshipStatus == "friends") {
                                 u.phone
@@ -297,7 +296,6 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Bio / Tagline
                         Text(
                             text = u.bio,
                             color = Slate300,
@@ -306,19 +304,15 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Action Buttons: If viewing another person -> Call, Message, Add Friend
+                        // Action Buttons: Call, Message, Friend Actions
                         if (!isOwnProfile) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Call
                                 Button(
                                     onClick = {
-                                        if (!phoneToDisplay.contains("•")) {
-                                            NillBookRepository.recordCall(u.name, u.phone, CallType.OUTGOING)
-                                            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${u.phone}")))
-                                        }
+                                        callDialogTarget = Pair(u.name, u.phone)
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = Emerald400, contentColor = Slate950),
                                     shape = RoundedCornerShape(10.dp),
@@ -329,11 +323,8 @@ fun ProfileScreen(
                                     Text("Call", fontWeight = FontWeight.Bold)
                                 }
 
-                                // Message
                                 Button(
-                                    onClick = {
-                                        onOpenChat?.invoke(u.phone, u.name)
-                                    },
+                                    onClick = { onOpenChat?.invoke(u.phone, u.name) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.weight(1f)
@@ -343,7 +334,6 @@ fun ProfileScreen(
                                     Text("Message", fontWeight = FontWeight.Bold)
                                 }
 
-                                // Friend action button
                                 when (friendshipStatus) {
                                     "friends" -> {
                                         FilledTonalButton(
@@ -380,7 +370,6 @@ fun ProfileScreen(
                                 }
                             }
                         } else {
-                            // Own Profile Actions: Edit Profile & Change Photo
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -397,7 +386,7 @@ fun ProfileScreen(
                                 ) {
                                     Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Upload Photo", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Photo", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 Button(
@@ -408,7 +397,7 @@ fun ProfileScreen(
                                 ) {
                                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Edit Details", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Edit Info", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -437,16 +426,18 @@ fun ProfileScreen(
                             letterSpacing = 1.sp
                         )
 
-                        ProfileInfoRow("Bio / Status", u.bio)
+                        ProfileInfoRow("Username", "@${u.username}")
+                        ProfileInfoRow("About", u.about)
                         ProfileInfoRow("Location", u.location)
                         ProfileInfoRow("Gender", u.gender)
                         ProfileInfoRow("Birthday", PhoneUtils.formatBirthday(u.birthday))
-                        ProfileInfoRow("Member Since", u.createdAt)
+                        ProfileInfoRow("Presence", if (isOnline) "Online Now" else "Offline Mode")
+                        ProfileInfoRow("Two-Factor Auth", if (u.twoFactorEnabled) "Active (Secure)" else "Disabled")
                     }
                 }
             }
 
-            // Privacy Section (only on own profile)
+            // Privacy & Account Controls
             if (isOwnProfile) {
                 item {
                     Card(
@@ -514,7 +505,7 @@ fun ProfileScreen(
                     }
                 }
 
-                // Account Logout Section
+                // Account Actions
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -526,7 +517,7 @@ fun ProfileScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan400),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Switch Account")
+                            Text("Switch User")
                         }
 
                         OutlinedButton(
@@ -541,6 +532,26 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+
+    // Smart Call Dialog
+    callDialogTarget?.let { (name, phone) ->
+        SmartCallOptionDialog(
+            contactName = name,
+            phone = phone,
+            isOnline = isOnline,
+            onDismiss = { callDialogTarget = null },
+            onInternetAudioCall = {
+                NillBookRepository.startInternetCall(name, phone, CallMode.INTERNET_AUDIO)
+            },
+            onInternetVideoCall = {
+                NillBookRepository.startInternetCall(name, phone, CallMode.INTERNET_VIDEO)
+            },
+            onSimCall = { simSlot ->
+                NillBookRepository.recordCall(name, phone, CallType.OUTGOING, CallMode.SIM_CARRIER, simSlot)
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+            }
+        )
     }
 
     // Edit Profile Details Dialog
@@ -563,26 +574,100 @@ fun ProfileScreen(
                 showEditProfileDialog = false
             }
         )
+    }
 
-        // Settings Dialog triggered by settings button on far right of My Profile
-        if (showSettingsDialog) {
-            ProfileSettingsDialog(
-                user = u,
-                onDismiss = { showSettingsDialog = false },
-                onUpdateVisibility = { isChecked ->
-                    NillBookRepository.updateProfile(
-                        name = u.name,
-                        phone = u.phone,
-                        gender = u.gender,
-                        birthday = u.birthday,
-                        bio = u.bio,
-                        location = u.location,
-                        showPublic = isChecked
+    // Settings Dialog
+    if (showSettingsDialog && displayedUser != null) {
+        val u = displayedUser
+        ProfileSettingsDialog(
+            user = u,
+            onDismiss = { showSettingsDialog = false },
+            onUpdateVisibility = { isChecked ->
+                NillBookRepository.updateProfile(
+                    name = u.name,
+                    phone = u.phone,
+                    gender = u.gender,
+                    birthday = u.birthday,
+                    bio = u.bio,
+                    location = u.location,
+                    showPublic = isChecked
+                )
+            },
+            onOpenDeleteAccount = {
+                showDeleteAccountConfirm = true
+            },
+            onToast = { toastMessage = it }
+        )
+    }
+
+    // Account Deletion Confirmation Dialog
+    if (showDeleteAccountConfirm) {
+        var keepLocalData by remember { mutableStateOf(true) }
+
+        AlertDialog(
+            onDismissRequest = { showDeleteAccountConfirm = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Red400)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Delete Account Permanently", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "This will permanently delete your online Nill Book caller ID profile, directory contributions, and friend connections from the cloud.",
+                        color = Slate300,
+                        fontSize = 13.sp
                     )
-                },
-                onToast = { toastMessage = it }
-            )
-        }
+
+                    Surface(
+                        color = Slate950,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = keepLocalData,
+                                onCheckedChange = { keepLocalData = it },
+                                colors = CheckboxDefaults.colors(checkedColor = Cyan400)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text("Retain local device phonebook", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Keep saved device contacts and SMS drafts on this phone", color = Slate400, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        NillBookRepository.deleteAccount()
+                        if (!keepLocalData) {
+                            LocalStorageManager.clearLocalMediaCache(context)
+                        }
+                        showDeleteAccountConfirm = false
+                        toastMessage = "Account deleted successfully."
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red400, contentColor = Slate950)
+                ) {
+                    Text("Confirm Permanent Deletion", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAccountConfirm = false }) {
+                    Text("Cancel", color = Slate400)
+                }
+            },
+            containerColor = Slate900
+        )
     }
 }
 
@@ -596,7 +681,7 @@ fun ProfileInfoRow(label: String, value: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, color = Slate400, fontSize = 13.sp)
-        Text(value, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        Text(value, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 2)
     }
 }
 
@@ -696,45 +781,11 @@ fun EditProfileDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Gender radio choices
-                Text("Gender", color = Slate400, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    listOf("Male", "Female", "Other").forEach { g ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = gender == g,
-                                onClick = { gender = g },
-                                colors = RadioButtonDefaults.colors(selectedColor = Cyan400, unselectedColor = Slate500)
-                            )
-                            Text(g, color = Slate200, fontSize = 13.sp)
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = birthday,
-                    onValueChange = { birthday = it },
-                    label = { Text("Date of Birth (YYYY-MM-DD)", color = Slate400) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Cyan400,
-                        unfocusedBorderColor = Slate700,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedContainerColor = Slate950,
-                        unfocusedContainerColor = Slate950
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = Slate400)
-                    }
+                    TextButton(onClick = onDismiss) { Text("Cancel", color = Slate400) }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { onSave(name, phone, bio, location, gender, birthday) },
@@ -754,13 +805,18 @@ fun ProfileSettingsDialog(
     user: User,
     onDismiss: () -> Unit,
     onUpdateVisibility: (Boolean) -> Unit,
+    onOpenDeleteAccount: () -> Unit,
     onToast: (String) -> Unit
 ) {
+    val context = LocalContext.current
     var showNumberPublic by remember { mutableStateOf(user.showNumberPublic) }
     var spamProtection by remember { mutableStateOf(true) }
     var readReceipts by remember { mutableStateOf(true) }
-    var videoCallHd by remember { mutableStateOf(true) }
-    var pushNotifications by remember { mutableStateOf(true) }
+    var showMediaManager by remember { mutableStateOf(false) }
+    var showRestoreConfirm by remember { mutableStateOf(false) }
+
+    val lastBackup by LocalStorageManager.lastBackup.collectAsState()
+    val totalStorageBytes = remember(showMediaManager) { LocalStorageManager.getTotalStorageSizeBytes(context) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -785,7 +841,7 @@ fun ProfileSettingsDialog(
                         Icon(Icons.Default.Settings, contentDescription = null, tint = Cyan400, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Settings",
+                            text = LanguageManager.t("settings"),
                             color = Color.White,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
@@ -801,7 +857,7 @@ fun ProfileSettingsDialog(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp),
+                        .heightIn(max = 460.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // Privacy & Caller ID
@@ -816,62 +872,123 @@ fun ProfileSettingsDialog(
                             onCheckedChange = {
                                 showNumberPublic = it
                                 onUpdateVisibility(it)
-                                onToast(if (it) "Number is now public in directory" else "Number hidden from directory")
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SettingToggleRow(
-                            icon = Icons.Default.DoneAll,
-                            title = "Read Receipts & Status",
-                            subtitle = "Show when you read messages and stay online",
-                            checked = readReceipts,
-                            onCheckedChange = {
-                                readReceipts = it
-                                onToast(if (it) "Read receipts enabled" else "Read receipts disabled")
+                                onToast(if (it) "Number is now public" else "Number hidden")
                             }
                         )
                     }
 
-                    // Security & Calls
+                    // Local Storage & Media Management
                     item {
-                        Text("CALLS & SECURITY", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text("STORAGE & MEDIA ON DEVICE", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(6.dp))
-                        SettingToggleRow(
-                            icon = Icons.Default.Security,
-                            title = "Spam Shield & Fraud Filter",
-                            subtitle = "Automatically warn or silence suspected spam calls",
-                            checked = spamProtection,
-                            onCheckedChange = {
-                                spamProtection = it
-                                onToast(if (it) "Spam shield active" else "Spam shield disabled")
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Slate950),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = Cyan400, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text("Stored Media & Docs", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                            Text("Total: ${LocalStorageManager.formatBytes(totalStorageBytes)} on device", color = Slate400, fontSize = 11.sp)
+                                        }
+                                    }
+                                    TextButton(onClick = { showMediaManager = true }) {
+                                        Text("Manage", color = Cyan400, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Clear media cache files", color = Slate400, fontSize = 11.sp)
+                                    TextButton(onClick = {
+                                        val count = LocalStorageManager.clearLocalMediaCache(context)
+                                        onToast("Cleared $count cached media files.")
+                                    }) {
+                                        Text("Clear Cache", color = Red400, fontSize = 11.sp)
+                                    }
+                                }
                             }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        SettingToggleRow(
-                            icon = Icons.Default.Videocam,
-                            title = "HD Video Call Acceleration",
-                            subtitle = "Optimize hardware codec for smooth video calls",
-                            checked = videoCallHd,
-                            onCheckedChange = { videoCallHd = it }
-                        )
+                        }
                     }
 
-                    // Notifications
+                    // Local Backup & Restore
                     item {
-                        Text("NOTIFICATIONS", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text("LOCAL BACKUP & RESTORE", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(6.dp))
-                        SettingToggleRow(
-                            icon = Icons.Default.Notifications,
-                            title = "Message & Call Alerts",
-                            subtitle = "Ring and vibrate for incoming direct messages",
-                            checked = pushNotifications,
-                            onCheckedChange = { pushNotifications = it }
-                        )
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Slate950),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "Backup contacts, call history, and message drafts locally to device storage.",
+                                    color = Slate300,
+                                    fontSize = 11.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                if (lastBackup != null) {
+                                    Text(
+                                        "Last Backup: ${lastBackup!!.timestamp} (${lastBackup!!.fileSizeFormatted})",
+                                        color = Emerald400,
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            val file = LocalStorageManager.createLocalBackup(context)
+                                            if (file != null) {
+                                                onToast("Local backup saved successfully!")
+                                            } else {
+                                                onToast("Failed to create local backup.")
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Backup Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { showRestoreConfirm = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Slate200),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Restore", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // Storage & Clear Cache
+                    // Account Management & Deletion
                     item {
-                        Text("STORAGE & DATA", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text("ACCOUNT MANAGEMENT", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(6.dp))
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Slate950),
@@ -885,44 +1002,193 @@ fun ProfileSettingsDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.CleaningServices, contentDescription = null, tint = Slate400, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text("Clear Temporary Cache", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                        Text("Free up disk space (12.4 MB)", color = Slate500, fontSize = 11.sp)
-                                    }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Delete Account", color = Red400, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Permanently delete cloud profile & directory listings", color = Slate500, fontSize = 11.sp)
                                 }
-                                TextButton(onClick = { onToast("Cache cleared (12.4 MB freed)") }) {
-                                    Text("Clear", color = Cyan400, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Button(
+                                    onClick = {
+                                        onDismiss()
+                                        onOpenDeleteAccount()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Red400.copy(alpha = 0.2f), contentColor = Red400),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
 
-                    // App Version info
+                    // Version info
                     item {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("NILLBOOK v1.2.0", color = Slate500, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                Text("Privacy-First Caller ID & Encrypted Messenger", color = Slate600, fontSize = 10.sp)
+                                Text("NILL BOOK v2.1.0", color = Slate500, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                Text("Verified Communication & Contact Management", color = Slate600, fontSize = 10.sp)
                             }
                         }
                     }
                 }
+            }
+        }
+    }
 
-                Spacer(modifier = Modifier.height(14.dp))
+    // Media Manager Dialog
+    if (showMediaManager) {
+        LocalMediaManagerDialog(
+            onDismiss = { showMediaManager = false },
+            onToast = onToast
+        )
+    }
 
+    // Restore Backup Confirmation Dialog
+    if (showRestoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirm = false },
+            title = { Text("Restore Local Backup?", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This will restore your contacts, call logs, and conversations from the latest local device backup file. Existing contacts will be merged safely without creating duplicates.",
+                    color = Slate300,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
                 Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    onClick = {
+                        val (c, calls, convs) = LocalStorageManager.restoreLocalBackup(context)
+                        showRestoreConfirm = false
+                        onToast("Restored $c contacts, $calls call logs, and $convs conversations.")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950)
                 ) {
-                    Text("Done", fontWeight = FontWeight.Bold)
+                    Text("Confirm Restore", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirm = false }) {
+                    Text("Cancel", color = Slate400)
+                }
+            },
+            containerColor = Slate900
+        )
+    }
+}
+
+@Composable
+fun LocalMediaManagerDialog(
+    onDismiss: () -> Unit,
+    onToast: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val storedMedia by LocalStorageManager.storedMedia.collectAsState()
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Slate900,
+            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Slate700)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Device Stored Files", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("${storedMedia.size} items stored on phone", color = Cyan400, fontSize = 11.sp)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Slate400)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (storedMedia.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Slate600, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("No stored media files on device", color = Slate400, fontSize = 12.sp)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(storedMedia.size) { index ->
+                            val item = storedMedia[index]
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Slate950),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = when (item.fileType) {
+                                            "image" -> Icons.Default.Image
+                                            "video" -> Icons.Default.Videocam
+                                            "pdf" -> Icons.Default.PictureAsPdf
+                                            "audio" -> Icons.Default.Audiotrack
+                                            else -> Icons.Default.Description
+                                        },
+                                        contentDescription = null,
+                                        tint = Cyan400,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.fileName, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                        Text("${LocalStorageManager.formatBytes(item.sizeBytes)} • ${item.timestamp}", color = Slate400, fontSize = 10.sp)
+                                    }
+                                    IconButton(
+                                        onClick = { LocalStorageManager.openLocalFile(context, item.localPath, item.mimeType) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.OpenInNew, contentDescription = "Open", tint = Slate300, modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { LocalStorageManager.shareLocalFile(context, item.localPath, item.mimeType) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = "Share", tint = Slate300, modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            LocalStorageManager.deleteMediaFile(context, item.fileName)
+                                            onToast("Deleted ${item.fileName}")
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Red400, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -946,21 +1212,18 @@ fun SettingToggleRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(icon, contentDescription = null, tint = Cyan400, modifier = Modifier.size(20.dp))
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = icon, contentDescription = null, tint = Cyan400, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Text(subtitle, color = Slate400, fontSize = 11.sp, lineHeight = 14.sp)
+                    Text(subtitle, color = Slate500, fontSize = 11.sp)
                 }
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,

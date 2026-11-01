@@ -20,11 +20,18 @@ val Slate100 = Color(0xFFEEF0FF)
 val Cyan950 = Color(0xFF00363E)
 val Cyan400 = Color(0xFF8AEBFF)
 val Cyan300 = Color(0xFFA2EEFF)
+val Cyan200 = Color(0xFFB2EBF2)
 
 val Emerald400 = Color(0xFF45DFA4)
 val Emerald950 = Color(0xFF003823)
 
+val Amber400 = Color(0xFFFFC107)
+val Amber950 = Color(0xFF452B00)
+val Amber200 = Color(0xFFFFE082)
+val Amber100 = Color(0xFFFFECB3)
+
 val Red400 = Color(0xFFFF9D94)
+val Red500 = Color(0xFFEF4444)
 val Red950 = Color(0xFF3E0A06)
 
 private val DarkColorScheme = darkColorScheme(
