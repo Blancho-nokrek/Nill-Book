@@ -77,6 +77,33 @@ object NillBookRepository {
             gender = "Female",
             birthday = "1996-07-30",
             showNumberPublic = false
+        ),
+        User(
+            id = "user_nafis",
+            name = "Nafis Iqbal",
+            email = "nafis@example.com",
+            phone = "+8801723456789",
+            gender = "Male",
+            birthday = "1997-03-12",
+            showNumberPublic = false
+        ),
+        User(
+            id = "user_tasnim",
+            name = "Tasnim Jahan",
+            email = "tasnim@example.com",
+            phone = "+8801834567890",
+            gender = "Female",
+            birthday = "1999-11-20",
+            showNumberPublic = true
+        ),
+        User(
+            id = "user_mehedi",
+            name = "Mehedi Hasan",
+            email = "mehedi@example.com",
+            phone = "+8801512345678",
+            gender = "Male",
+            birthday = "1993-05-15",
+            showNumberPublic = false
         )
     )
 
@@ -183,13 +210,23 @@ object NillBookRepository {
         _currentUser.value = null
     }
 
-    fun updateProfile(name: String, phone: String, gender: String, birthday: String, showPublic: Boolean) {
+    fun updateProfile(
+        name: String,
+        phone: String,
+        gender: String,
+        birthday: String,
+        bio: String,
+        location: String,
+        showPublic: Boolean
+    ) {
         val current = _currentUser.value ?: return
         val updated = current.copy(
             name = name,
             phone = phone,
             gender = gender,
             birthday = birthday,
+            bio = bio,
+            location = location,
             showNumberPublic = showPublic
         )
         _currentUser.value = updated
@@ -197,6 +234,27 @@ object NillBookRepository {
         if (idx != -1) {
             registeredUsers[idx] = updated
         }
+    }
+
+    fun updateProfilePhoto(photoUri: String) {
+        val current = _currentUser.value ?: return
+        val updated = current.copy(photo = photoUri)
+        _currentUser.value = updated
+        val idx = registeredUsers.indexOfFirst { it.id == current.id }
+        if (idx != -1) {
+            registeredUsers[idx] = updated
+        }
+    }
+
+    fun getUserById(userId: String): User? {
+        if (_currentUser.value?.id == userId) return _currentUser.value
+        return registeredUsers.find { it.id == userId }
+    }
+
+    fun getUserByPhone(phone: String): User? {
+        if (_currentUser.value?.phone == phone) return _currentUser.value
+        val e164 = PhoneUtils.toE164(phone) ?: phone
+        return registeredUsers.find { it.phone == phone || it.phone == e164 }
     }
 
     // Contact Operations
@@ -414,21 +472,179 @@ object NillBookRepository {
 
     fun getFriendsList(): List<FriendItem> {
         val me = _currentUser.value ?: return emptyList()
-        val out = mutableListOf<FriendItem>()
+        val list = mutableListOf<FriendItem>()
         for (f in _friendships.value) {
-            val otherId = if (f.requesterId == me.id) f.addresseeId else f.requesterId
-            val user = registeredUsers.find { it.id == otherId } ?: continue
-            val status = if (f.status == "ACCEPTED") "friends" else if (f.addresseeId == me.id) "pending_in" else "pending_out"
-            out.add(
-                FriendItem(
-                    userId = user.id,
-                    name = user.name,
-                    phone = if (status == "friends") user.phone else PhoneUtils.maskNumber(user.phone),
-                    requestId = f.id,
-                    status = status
+            if (f.requesterId == me.id) {
+                val targetUser = registeredUsers.find { it.id == f.addresseeId } ?: continue
+                val status = if (f.status == "ACCEPTED") "friends" else "pending_out"
+                val phoneToShow = if (status == "friends" || targetUser.showNumberPublic) targetUser.phone else PhoneUtils.maskNumber(targetUser.phone)
+                list.add(
+                    FriendItem(
+                        userId = targetUser.id,
+                        name = targetUser.name,
+                        phone = phoneToShow,
+                        requestId = f.id,
+                        status = status
+                    )
+                )
+            } else if (f.addresseeId == me.id) {
+                val targetUser = registeredUsers.find { it.id == f.requesterId } ?: continue
+                val status = if (f.status == "ACCEPTED") "friends" else "pending_in"
+                val phoneToShow = if (status == "friends" || targetUser.showNumberPublic) targetUser.phone else PhoneUtils.maskNumber(targetUser.phone)
+                list.add(
+                    FriendItem(
+                        userId = targetUser.id,
+                        name = targetUser.name,
+                        phone = phoneToShow,
+                        requestId = f.id,
+                        status = status
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun getFriendSuggestions(): List<FriendSuggestion> {
+        val me = _currentUser.value ?: return emptyList()
+        val activeIds = _friendships.value.flatMap { listOf(it.requesterId, it.addresseeId) }.toSet()
+
+        return registeredUsers
+            .filter { it.id != me.id && !activeIds.contains(it.id) }
+            .map { u ->
+                FriendSuggestion(
+                    userId = u.id,
+                    name = u.name,
+                    subtitle = "Registered Caller • Verified NILLBOOK Profile",
+                    mutualFriendsCount = when (u.id) {
+                        "user_amit" -> 2
+                        "user_sarah" -> 1
+                        "user_nafis" -> 3
+                        "user_tasnim" -> 2
+                        else -> 1
+                    },
+                    phone = PhoneUtils.maskNumber(u.phone)
+                )
+            }
+    }
+
+    // WhatsApp-style Chat Conversations
+    private val _conversations = MutableStateFlow<List<ChatConversation>>(
+        listOf(
+            ChatConversation(
+                id = "conv_rahim",
+                contactName = "Rahim Bhai",
+                phone = "+8801700000000",
+                lastMessage = "Assalamu Alaikum bhai, kemon achhen?",
+                lastTimestamp = "10:45 AM",
+                unreadCount = 1,
+                messages = listOf(
+                    ChatMessage("m1", "Hello Rahim bhai", "10:30 AM", isFromMe = true),
+                    ChatMessage("m2", "Assalamu Alaikum bhai, kemon achhen?", "10:45 AM", isFromMe = false)
+                )
+            ),
+            ChatConversation(
+                id = "conv_farhana",
+                contactName = "Farhana Akter",
+                phone = "+8801819876543",
+                lastMessage = "Got your number from NILLBOOK!",
+                lastTimestamp = "Yesterday",
+                unreadCount = 0,
+                messages = listOf(
+                    ChatMessage("m3", "Hi! Are you on NillBook?", "Yesterday 4:10 PM", isFromMe = true),
+                    ChatMessage("m4", "Yes, got your number from NILLBOOK!", "Yesterday 4:15 PM", isFromMe = false)
+                )
+            ),
+            ChatConversation(
+                id = "conv_tanvir",
+                contactName = "Tanvir Ahmed",
+                phone = "+8801912334455",
+                lastMessage = "Let's connect this weekend",
+                lastTimestamp = "Oct 28",
+                unreadCount = 0,
+                messages = listOf(
+                    ChatMessage("m5", "Hey Tanvir, let's connect this weekend", "Oct 28 2:00 PM", isFromMe = true)
+                )
+            )
+        )
+    )
+    val conversations: StateFlow<List<ChatConversation>> = _conversations.asStateFlow()
+
+    fun sendMessage(phone: String, contactName: String, text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val current = _conversations.value.toMutableList()
+        val existingIndex = current.indexOfFirst { it.phone == phone }
+        val newMsg = ChatMessage(
+            id = "msg_${UUID.randomUUID().toString().take(8)}",
+            text = trimmed,
+            timestamp = "Just now",
+            isFromMe = true
+        )
+
+        if (existingIndex != -1) {
+            val conv = current[existingIndex]
+            current[existingIndex] = conv.copy(
+                lastMessage = trimmed,
+                lastTimestamp = "Just now",
+                messages = conv.messages + newMsg
+            )
+        } else {
+            current.add(
+                0,
+                ChatConversation(
+                    id = "conv_${UUID.randomUUID().toString().take(8)}",
+                    contactName = contactName,
+                    phone = phone,
+                    lastMessage = trimmed,
+                    lastTimestamp = "Just now",
+                    unreadCount = 0,
+                    messages = listOf(newMsg)
                 )
             )
         }
-        return out
+        _conversations.value = current
+    }
+
+    fun getConversation(phone: String): ChatConversation? {
+        return _conversations.value.find { it.phone == phone }
+    }
+
+    fun clearConversation(phone: String) {
+        val current = _conversations.value.toMutableList()
+        val idx = current.indexOfFirst { it.phone == phone }
+        if (idx != -1) {
+            current[idx] = current[idx].copy(messages = emptyList(), lastMessage = "Chat cleared", unreadCount = 0)
+            _conversations.value = current
+        }
+    }
+
+    // Call History Logs
+    private val _callLogs = MutableStateFlow<List<CallLogEntry>>(
+        listOf(
+            CallLogEntry("log_1", "Rahim Bhai", "+8801700000000", CallType.INCOMING, "Today, 11:42 AM", "2m 15s"),
+            CallLogEntry("log_2", "Farhana Akter", "+8801819876543", CallType.MISSED, "Today, 10:15 AM", ""),
+            CallLogEntry("log_3", "Dr. Kamal Hossain", "+8801555667788", CallType.OUTGOING, "Yesterday, 4:30 PM", "1m 05s"),
+            CallLogEntry("log_4", "Unknown Caller", "+8801912334455", CallType.MISSED, "Yesterday, 1:20 PM", ""),
+            CallLogEntry("log_5", "Shakib Al Hasan Fan Club", "+8801300998877", CallType.INCOMING, "Oct 29, 6:00 PM", "45s")
+        )
+    )
+    val callLogs: StateFlow<List<CallLogEntry>> = _callLogs.asStateFlow()
+
+    fun recordCall(name: String, phone: String, type: CallType = CallType.OUTGOING) {
+        val newEntry = CallLogEntry(
+            id = "log_${UUID.randomUUID().toString().take(8)}",
+            name = name,
+            phone = phone,
+            type = type,
+            timestamp = "Just now",
+            duration = if (type == CallType.MISSED) "" else "0m 10s"
+        )
+        _callLogs.value = listOf(newEntry) + _callLogs.value
+    }
+
+    fun clearCallLogs() {
+        _callLogs.value = emptyList()
     }
 }
+

@@ -1,12 +1,20 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,25 +22,82 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.data.*
+import com.example.ui.components.ProfileAvatarPlaceholder
 import com.example.ui.theme.*
 
 @Composable
 fun ProfileScreen(
+    targetUserId: String? = null,
     onOpenAuth: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    onOpenChat: ((phone: String, name: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val user by NillBookRepository.currentUser.collectAsState()
-    val contacts by NillBookRepository.userContacts.collectAsState()
+    val context = LocalContext.current
+    val currentUser by NillBookRepository.currentUser.collectAsState()
     val friendships by NillBookRepository.friendships.collectAsState()
 
+    // Determine if this is own profile or another person's profile
+    val isOwnProfile = remember(targetUserId, currentUser) {
+        targetUserId == null || targetUserId == currentUser?.id
+    }
+
+    val displayedUser = remember(targetUserId, currentUser, friendships) {
+        if (isOwnProfile) {
+            currentUser
+        } else {
+            NillBookRepository.getUserById(targetUserId!!) ?: User(
+                id = targetUserId,
+                name = "Directory User",
+                email = "user@nillbook.com",
+                phone = "+8801700000000",
+                bio = "NILLBOOK Community Member"
+            )
+        }
+    }
+
+    // Friend relationship with displayed user
+    val friendshipStatus = remember(displayedUser, currentUser, friendships) {
+        if (displayedUser == null || currentUser == null || isOwnProfile) "none"
+        else {
+            val me = currentUser!!.id
+            val other = displayedUser.id
+            val f = friendships.find {
+                (it.requesterId == me && it.addresseeId == other) ||
+                (it.requesterId == other && it.addresseeId == me)
+            }
+            when {
+                f == null -> "none"
+                f.status == "ACCEPTED" -> "friends"
+                f.requesterId == me -> "pending_out"
+                else -> "pending_in"
+            }
+        }
+    }
+
     var showEditProfileDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var toastMessage by remember { mutableStateOf<String?>(null) }
+
+    // Modern Zero-Permission Photo Picker
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            NillBookRepository.updateProfilePhoto(uri.toString())
+            toastMessage = "Profile picture updated!"
+        }
+    }
 
     val friendCount = remember(friendships) {
         friendships.count { it.status == "ACCEPTED" }
@@ -46,7 +111,57 @@ fun ProfileScreen(
         contentPadding = PaddingValues(top = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (user == null) {
+        // Top Header: Title on Left, Settings on Far Right for My Profile
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Slate900)
+                                .size(38.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
+                    Text(
+                        text = if (isOwnProfile) "My Profile" else "Caller Profile",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (isOwnProfile && displayedUser != null) {
+                    IconButton(
+                        onClick = { showSettingsDialog = true },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Slate900)
+                            .border(1.dp, Slate800, RoundedCornerShape(10.dp))
+                            .size(40.dp)
+                            .testTag("profile_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Profile Settings",
+                            tint = Cyan400,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (displayedUser == null) {
+            // Not signed in state
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -59,7 +174,7 @@ fun ProfileScreen(
                     ) {
                         Text("Not signed in", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("Sign in to manage your identity, privacy, and contacts directory", color = Slate400, fontSize = 13.sp)
+                        Text("Sign in to manage your identity, photo, and privacy settings", color = Slate400, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = onOpenAuth,
@@ -72,9 +187,29 @@ fun ProfileScreen(
                 }
             }
         } else {
-            val u = user!!
+            val u = displayedUser
 
-            // Profile Card Header
+            // Status feedback banner
+            if (toastMessage != null) {
+                item {
+                    Surface(
+                        color = Slate900,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Cyan400, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(toastMessage ?: "", color = Slate200, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
+            // Beautiful Profile Card Header with Photo Upload & Cover
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -86,83 +221,202 @@ fun ProfileScreen(
                         modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(Cyan400.copy(alpha = 0.15f))
-                                .border(2.dp, Cyan400, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        // Avatar with Photo Upload badge (if own profile) or Photo
+                        Box(contentAlignment = Alignment.BottomEnd) {
+                            ProfileAvatarPlaceholder(
+                                name = u.name,
+                                size = 88,
+                                photoUrl = u.photo,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .border(2.5.dp, Cyan400, CircleShape)
+                            )
+
+                            // Profile picture upload button for own profile
+                            if (isOwnProfile) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Cyan400)
+                                        .border(2.dp, Slate900, CircleShape)
+                                        .clickable {
+                                            photoPickerLauncher.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        }
+                                        .testTag("upload_profile_photo_button"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = "Upload Profile Picture",
+                                        tint = Slate950,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // User Name with Verified Badge
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = u.name.take(1).uppercase(),
-                                color = Cyan400,
-                                fontSize = 28.sp,
+                                text = u.name,
+                                color = Color.White,
+                                fontSize = 21.sp,
                                 fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.Verified,
+                                contentDescription = "Verified Profile",
+                                tint = Cyan400,
+                                modifier = Modifier.size(19.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Phone Number (Masked or Unmasked)
+                        val phoneToDisplay = remember(u, isOwnProfile, friendshipStatus) {
+                            if (isOwnProfile || u.showNumberPublic || friendshipStatus == "friends") {
+                                u.phone
+                            } else {
+                                PhoneUtils.maskNumber(u.phone)
+                            }
+                        }
                         Text(
-                            text = u.name,
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = u.phone,
+                            text = phoneToDisplay,
                             color = Cyan400,
                             fontSize = 14.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Medium
                         )
+
                         Spacer(modifier = Modifier.height(4.dp))
+
+                        // Bio / Tagline
                         Text(
-                            text = u.email,
-                            color = Slate400,
+                            text = u.bio,
+                            color = Slate300,
                             fontSize = 13.sp
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Stats row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Slate950)
-                                .padding(vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(contacts.size.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text("Saved Contacts", color = Slate500, fontSize = 11.sp)
-                            }
-                            Box(modifier = Modifier.width(1.dp).height(30.dp).background(Slate800))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(friendCount.toString(), color = Cyan400, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text("Connections", color = Slate500, fontSize = 11.sp)
-                            }
-                        }
+                        // Action Buttons: If viewing another person -> Call, Message, Add Friend
+                        if (!isOwnProfile) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Call
+                                Button(
+                                    onClick = {
+                                        if (!phoneToDisplay.contains("•")) {
+                                            NillBookRepository.recordCall(u.name, u.phone, CallType.OUTGOING)
+                                            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${u.phone}")))
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Emerald400, contentColor = Slate950),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Call", fontWeight = FontWeight.Bold)
+                                }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                                // Message
+                                Button(
+                                    onClick = {
+                                        onOpenChat?.invoke(u.phone, u.name)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Message", fontWeight = FontWeight.Bold)
+                                }
 
-                        Button(
-                            onClick = { showEditProfileDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Slate200),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("edit_profile_button")
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Edit Profile Details", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                // Friend action button
+                                when (friendshipStatus) {
+                                    "friends" -> {
+                                        FilledTonalButton(
+                                            onClick = {},
+                                            enabled = false,
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Slate800, contentColor = Cyan300)
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                    "pending_out" -> {
+                                        FilledTonalButton(
+                                            onClick = {},
+                                            enabled = false,
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Slate800, contentColor = Slate400)
+                                        ) {
+                                            Text("Sent", fontSize = 12.sp)
+                                        }
+                                    }
+                                    else -> {
+                                        Button(
+                                            onClick = {
+                                                NillBookRepository.sendFriendRequest(u.id)
+                                                toastMessage = "Friend request sent to ${u.name}!"
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Cyan400)
+                                        ) {
+                                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Own Profile Actions: Edit Profile & Change Photo
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan400),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).testTag("change_photo_btn")
+                                ) {
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Upload Photo", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = { showEditProfileDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Slate100),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).testTag("edit_profile_button")
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Edit Details", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Profile Details Details
+            // About & Identity Details Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -183,6 +437,8 @@ fun ProfileScreen(
                             letterSpacing = 1.sp
                         )
 
+                        ProfileInfoRow("Bio / Status", u.bio)
+                        ProfileInfoRow("Location", u.location)
                         ProfileInfoRow("Gender", u.gender)
                         ProfileInfoRow("Birthday", PhoneUtils.formatBirthday(u.birthday))
                         ProfileInfoRow("Member Since", u.createdAt)
@@ -190,117 +446,143 @@ fun ProfileScreen(
                 }
             }
 
-            // Privacy Section
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Slate900),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Slate800))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+            // Privacy Section (only on own profile)
+            if (isOwnProfile) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Slate900),
+                        shape = RoundedCornerShape(16.dp),
+                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Slate800))
                     ) {
-                        Text(
-                            text = "PRIVACY CONTROLS",
-                            color = Slate400,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Public Caller Number",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Allow search results to display your unmasked phone number publicly.",
-                                    color = Slate400,
-                                    fontSize = 12.sp
+                            Text(
+                                text = "CALLER PRIVACY CONTROLS",
+                                color = Slate400,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Public Caller Number",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Allow search results to display your unmasked phone number publicly.",
+                                        color = Slate400,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Switch(
+                                    checked = u.showNumberPublic,
+                                    onCheckedChange = { isChecked ->
+                                        NillBookRepository.updateProfile(
+                                            name = u.name,
+                                            phone = u.phone,
+                                            gender = u.gender,
+                                            birthday = u.birthday,
+                                            bio = u.bio,
+                                            location = u.location,
+                                            showPublic = isChecked
+                                        )
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Slate950,
+                                        checkedTrackColor = Cyan400,
+                                        uncheckedThumbColor = Slate400,
+                                        uncheckedTrackColor = Slate800
+                                    ),
+                                    modifier = Modifier.testTag("privacy_public_number_switch")
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Switch(
-                                checked = u.showNumberPublic,
-                                onCheckedChange = { isChecked ->
-                                    NillBookRepository.updateProfile(
-                                        name = u.name,
-                                        phone = u.phone,
-                                        gender = u.gender,
-                                        birthday = u.birthday,
-                                        showPublic = isChecked
-                                    )
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Slate950,
-                                    checkedTrackColor = Cyan400,
-                                    uncheckedThumbColor = Slate400,
-                                    uncheckedTrackColor = Slate800
-                                ),
-                                modifier = Modifier.testTag("privacy_public_number_switch")
-                            )
                         }
                     }
                 }
-            }
 
-            // Account Switch / Logout
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onOpenAuth,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan400),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Cyan400.copy(alpha = 0.5f))),
-                        modifier = Modifier.weight(1f)
+                // Account Logout Section
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Switch Account")
-                    }
+                        OutlinedButton(
+                            onClick = onOpenAuth,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan400),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Switch Account")
+                        }
 
-                    OutlinedButton(
-                        onClick = { NillBookRepository.logout() },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Red400),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Red400.copy(alpha = 0.4f))),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Log Out")
+                        OutlinedButton(
+                            onClick = { NillBookRepository.logout() },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Red400),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Log Out")
+                        }
                     }
                 }
             }
         }
     }
 
-    if (showEditProfileDialog && user != null) {
-        val u = user!!
+    // Edit Profile Details Dialog
+    if (showEditProfileDialog && displayedUser != null) {
+        val u = displayedUser
         EditProfileDialog(
             user = u,
             onDismiss = { showEditProfileDialog = false },
-            onSave = { name, phone, gender, birthday ->
+            onSave = { name, phone, bio, location, gender, birthday ->
                 NillBookRepository.updateProfile(
                     name = name,
                     phone = phone,
                     gender = gender,
                     birthday = birthday,
+                    bio = bio,
+                    location = location,
                     showPublic = u.showNumberPublic
                 )
+                toastMessage = "Profile details saved!"
                 showEditProfileDialog = false
             }
         )
+
+        // Settings Dialog triggered by settings button on far right of My Profile
+        if (showSettingsDialog) {
+            ProfileSettingsDialog(
+                user = u,
+                onDismiss = { showSettingsDialog = false },
+                onUpdateVisibility = { isChecked ->
+                    NillBookRepository.updateProfile(
+                        name = u.name,
+                        phone = u.phone,
+                        gender = u.gender,
+                        birthday = u.birthday,
+                        bio = u.bio,
+                        location = u.location,
+                        showPublic = isChecked
+                    )
+                },
+                onToast = { toastMessage = it }
+            )
+        }
     }
 }
 
@@ -322,10 +604,12 @@ fun ProfileInfoRow(label: String, value: String) {
 fun EditProfileDialog(
     user: User,
     onDismiss: () -> Unit,
-    onSave: (name: String, phone: String, gender: String, birthday: String) -> Unit
+    onSave: (name: String, phone: String, bio: String, location: String, gender: String, birthday: String) -> Unit
 ) {
     var name by remember { mutableStateOf(user.name) }
     var phone by remember { mutableStateOf(user.phone) }
+    var bio by remember { mutableStateOf(user.bio) }
+    var location by remember { mutableStateOf(user.location) }
     var gender by remember { mutableStateOf(user.gender) }
     var birthday by remember { mutableStateOf(user.birthday) }
 
@@ -337,15 +621,51 @@ fun EditProfileDialog(
             modifier = Modifier.padding(16.dp)
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Edit Profile", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Customize Profile", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
 
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Display Name", color = Slate400) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Cyan400,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedContainerColor = Slate950,
+                        unfocusedContainerColor = Slate950
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("edit_name_input")
+                )
+
+                OutlinedTextField(
+                    value = bio,
+                    onValueChange = { bio = it },
+                    label = { Text("Bio / Status", color = Slate400) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Cyan400,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedContainerColor = Slate950,
+                        unfocusedContainerColor = Slate950
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("edit_bio_input")
+                )
+
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("Location", color = Slate400) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Cyan400,
@@ -417,7 +737,7 @@ fun EditProfileDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onSave(name, phone, gender, birthday) },
+                        onClick = { onSave(name, phone, bio, location, gender, birthday) },
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -425,6 +745,232 @@ fun EditProfileDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ProfileSettingsDialog(
+    user: User,
+    onDismiss: () -> Unit,
+    onUpdateVisibility: (Boolean) -> Unit,
+    onToast: (String) -> Unit
+) {
+    var showNumberPublic by remember { mutableStateOf(user.showNumberPublic) }
+    var spamProtection by remember { mutableStateOf(true) }
+    var readReceipts by remember { mutableStateOf(true) }
+    var videoCallHd by remember { mutableStateOf(true) }
+    var pushNotifications by remember { mutableStateOf(true) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Slate900,
+            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Slate700)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Settings, contentDescription = null, tint = Cyan400, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Settings",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Slate400)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Privacy & Caller ID
+                    item {
+                        Text("PRIVACY & CALLER ID", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SettingToggleRow(
+                            icon = Icons.Default.Public,
+                            title = "Public Directory Listing",
+                            subtitle = "Allow others to discover your name in caller ID search",
+                            checked = showNumberPublic,
+                            onCheckedChange = {
+                                showNumberPublic = it
+                                onUpdateVisibility(it)
+                                onToast(if (it) "Number is now public in directory" else "Number hidden from directory")
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SettingToggleRow(
+                            icon = Icons.Default.DoneAll,
+                            title = "Read Receipts & Status",
+                            subtitle = "Show when you read messages and stay online",
+                            checked = readReceipts,
+                            onCheckedChange = {
+                                readReceipts = it
+                                onToast(if (it) "Read receipts enabled" else "Read receipts disabled")
+                            }
+                        )
+                    }
+
+                    // Security & Calls
+                    item {
+                        Text("CALLS & SECURITY", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SettingToggleRow(
+                            icon = Icons.Default.Security,
+                            title = "Spam Shield & Fraud Filter",
+                            subtitle = "Automatically warn or silence suspected spam calls",
+                            checked = spamProtection,
+                            onCheckedChange = {
+                                spamProtection = it
+                                onToast(if (it) "Spam shield active" else "Spam shield disabled")
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SettingToggleRow(
+                            icon = Icons.Default.Videocam,
+                            title = "HD Video Call Acceleration",
+                            subtitle = "Optimize hardware codec for smooth video calls",
+                            checked = videoCallHd,
+                            onCheckedChange = { videoCallHd = it }
+                        )
+                    }
+
+                    // Notifications
+                    item {
+                        Text("NOTIFICATIONS", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SettingToggleRow(
+                            icon = Icons.Default.Notifications,
+                            title = "Message & Call Alerts",
+                            subtitle = "Ring and vibrate for incoming direct messages",
+                            checked = pushNotifications,
+                            onCheckedChange = { pushNotifications = it }
+                        )
+                    }
+
+                    // Storage & Clear Cache
+                    item {
+                        Text("STORAGE & DATA", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Slate950),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.CleaningServices, contentDescription = null, tint = Slate400, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text("Clear Temporary Cache", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Free up disk space (12.4 MB)", color = Slate500, fontSize = 11.sp)
+                                    }
+                                }
+                                TextButton(onClick = { onToast("Cache cleared (12.4 MB freed)") }) {
+                                    Text("Clear", color = Cyan400, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    // App Version info
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("NILLBOOK v1.2.0", color = Slate500, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                Text("Privacy-First Caller ID & Encrypted Messenger", color = Slate600, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Done", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingToggleRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Slate950),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(icon, contentDescription = null, tint = Cyan400, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, color = Slate400, fontSize = 11.sp, lineHeight = 14.sp)
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Slate950,
+                    checkedTrackColor = Cyan400,
+                    uncheckedThumbColor = Slate400,
+                    uncheckedTrackColor = Slate800
+                )
+            )
         }
     }
 }

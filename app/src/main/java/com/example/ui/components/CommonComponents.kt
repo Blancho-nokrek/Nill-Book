@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,10 +29,13 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.theme.*
 
+import androidx.compose.material.icons.automirrored.filled.Chat
+
 enum class AppScreen(val title: String, val icon: ImageVector) {
     SEARCH("Search", Icons.Default.Search),
+    MESSAGES("Chats", Icons.AutoMirrored.Filled.Chat),
+    FRIENDS("Friends", Icons.Default.Group),
     CONTACTS("Contacts", Icons.Default.Contacts),
-    FRIENDS("Network", Icons.Default.Group),
     PROFILE("Profile", Icons.Default.Person)
 }
 
@@ -128,9 +132,14 @@ fun NillBookTopBar(
 fun NillBookBottomBar(
     currentScreen: AppScreen,
     friendRequestsCount: Int,
+    unreadMessagesCount: Int = 0,
     onScreenSelected: (AppScreen) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val bottomScreens = remember {
+        listOf(AppScreen.SEARCH, AppScreen.MESSAGES, AppScreen.FRIENDS, AppScreen.CONTACTS)
+    }
+
     NavigationBar(
         modifier = modifier
             .fillMaxWidth()
@@ -139,7 +148,7 @@ fun NillBookBottomBar(
         contentColor = Slate400,
         tonalElevation = 0.dp
     ) {
-        AppScreen.entries.forEach { screen ->
+        bottomScreens.forEach { screen ->
             val isSelected = currentScreen == screen
             NavigationBarItem(
                 selected = isSelected,
@@ -153,6 +162,13 @@ fun NillBookBottomBar(
                                     contentColor = Slate950
                                 ) {
                                     Text(friendRequestsCount.toString())
+                                }
+                            } else if (screen == AppScreen.MESSAGES && unreadMessagesCount > 0) {
+                                Badge(
+                                    containerColor = Emerald400,
+                                    contentColor = Slate950
+                                ) {
+                                    Text(unreadMessagesCount.toString())
                                 }
                             }
                         }

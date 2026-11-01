@@ -32,23 +32,37 @@ class MainActivity : ComponentActivity() {
             NillBookTheme {
                 val user by NillBookRepository.currentUser.collectAsState()
                 val friendships by NillBookRepository.friendships.collectAsState()
+                val conversations by NillBookRepository.conversations.collectAsState()
 
                 var currentScreen by remember { mutableStateOf(AppScreen.SEARCH) }
                 var showAuthModal by remember { mutableStateOf(false) }
 
+                // Track if viewing another user's profile or own profile
+                var viewingProfileUserId by remember { mutableStateOf<String?>(null) }
+
                 // Quick add contact pre-filled parameters from search screen
                 var pendingAddName by remember { mutableStateOf<String?>(null) }
                 var pendingAddPhone by remember { mutableStateOf<String?>(null) }
+
+                // Direct chat launch target from search or contacts
+                var activeChatPhone by remember { mutableStateOf<String?>(null) }
+                var activeChatName by remember { mutableStateOf<String?>(null) }
 
                 val incomingRequestsCount = remember(friendships, user) {
                     val meId = user?.id ?: ""
                     friendships.count { it.addresseeId == meId && it.status == "PENDING" }
                 }
 
-                // Handle back press to return to Search if on secondary screen
-                BackHandler(enabled = currentScreen != AppScreen.SEARCH || showAuthModal) {
+                val unreadMessagesCount = remember(conversations) {
+                    conversations.sumOf { it.unreadCount }
+                }
+
+                // Handle back press to always return to Search screen or exit profile detail
+                BackHandler(enabled = currentScreen != AppScreen.SEARCH || showAuthModal || viewingProfileUserId != null) {
                     if (showAuthModal) {
                         showAuthModal = false
+                    } else if (viewingProfileUserId != null) {
+                        viewingProfileUserId = null
                     } else {
                         currentScreen = AppScreen.SEARCH
                     }
@@ -62,14 +76,21 @@ class MainActivity : ComponentActivity() {
                             currentScreen = currentScreen,
                             userName = user?.name ?: "NillBook",
                             friendRequestsCount = incomingRequestsCount,
-                            onProfileClick = { currentScreen = AppScreen.PROFILE }
+                            onProfileClick = {
+                                viewingProfileUserId = null
+                                currentScreen = AppScreen.PROFILE
+                            }
                         )
                     },
                     bottomBar = {
                         NillBookBottomBar(
                             currentScreen = currentScreen,
                             friendRequestsCount = incomingRequestsCount,
+                            unreadMessagesCount = unreadMessagesCount,
                             onScreenSelected = { screen ->
+                                if (screen == AppScreen.PROFILE) {
+                                    viewingProfileUserId = null
+                                }
                                 currentScreen = screen
                             }
                         )
@@ -92,26 +113,79 @@ class MainActivity : ComponentActivity() {
                                             pendingAddName = name
                                             pendingAddPhone = phone
                                             currentScreen = AppScreen.CONTACTS
+                                        },
+                                        onOpenChat = { phone, name ->
+                                            activeChatPhone = phone
+                                            activeChatName = name
+                                            currentScreen = AppScreen.MESSAGES
+                                        },
+                                        onViewProfile = { uid ->
+                                            viewingProfileUserId = uid
+                                            currentScreen = AppScreen.PROFILE
+                                        }
+                                    )
+                                }
+                                AppScreen.MESSAGES -> {
+                                    MessagesScreen(
+                                        initialPhone = activeChatPhone,
+                                        initialName = activeChatName,
+                                        onClearTarget = {
+                                            activeChatPhone = null
+                                            activeChatName = null
+                                        },
+                                        onViewProfile = { uidOrPhone ->
+                                            viewingProfileUserId = uidOrPhone
+                                            currentScreen = AppScreen.PROFILE
+                                        }
+                                    )
+                                }
+                                AppScreen.FRIENDS -> {
+                                    FriendsScreen(
+                                        onOpenChat = { phone, name ->
+                                            activeChatPhone = phone
+                                            activeChatName = name
+                                            currentScreen = AppScreen.MESSAGES
+                                        },
+                                        onViewProfile = { uid ->
+                                            viewingProfileUserId = uid
+                                            currentScreen = AppScreen.PROFILE
                                         }
                                     )
                                 }
                                 AppScreen.CONTACTS -> {
                                     ContactsScreen(
                                         initialAddName = pendingAddName,
-                                        initialAddPhone = pendingAddPhone
+                                        initialAddPhone = pendingAddPhone,
+                                        onOpenChat = { phone, name ->
+                                            activeChatPhone = phone
+                                            activeChatName = name
+                                            currentScreen = AppScreen.MESSAGES
+                                        },
+                                        onViewProfile = { phoneOrUid ->
+                                            viewingProfileUserId = phoneOrUid
+                                            currentScreen = AppScreen.PROFILE
+                                        }
                                     )
-                                    // Reset pending after passing to ContactsScreen
-                                    LaunchedEffect(Unit) {
-                                        pendingAddName = null
-                                        pendingAddPhone = null
+                                    LaunchedEffect(pendingAddName, pendingAddPhone) {
+                                        if (pendingAddName != null || pendingAddPhone != null) {
+                                            pendingAddName = null
+                                            pendingAddPhone = null
+                                        }
                                     }
-                                }
-                                AppScreen.FRIENDS -> {
-                                    FriendsScreen()
                                 }
                                 AppScreen.PROFILE -> {
                                     ProfileScreen(
-                                        onOpenAuth = { showAuthModal = true }
+                                        targetUserId = viewingProfileUserId,
+                                        onOpenAuth = { showAuthModal = true },
+                                        onBack = {
+                                            viewingProfileUserId = null
+                                            currentScreen = AppScreen.SEARCH
+                                        },
+                                        onOpenChat = { phone, name ->
+                                            activeChatPhone = phone
+                                            activeChatName = name
+                                            currentScreen = AppScreen.MESSAGES
+                                        }
                                     )
                                 }
                             }

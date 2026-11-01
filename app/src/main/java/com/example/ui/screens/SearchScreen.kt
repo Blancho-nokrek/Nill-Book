@@ -36,6 +36,8 @@ import com.example.ui.theme.*
 @Composable
 fun SearchScreen(
     onAddContactDirectly: (name: String, phone: String) -> Unit,
+    onOpenChat: ((phone: String, name: String) -> Unit)? = null,
+    onViewProfile: ((userId: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -304,10 +306,20 @@ fun SearchScreen(
         items(searchResults, key = { "${it.number}|${it.name}" }) { result ->
             SearchResultCard(
                 result = result,
+                onViewProfile = {
+                    val uid = result.userId ?: result.number
+                    onViewProfile?.invoke(uid)
+                },
                 onCall = {
                     if (result.numberVisible && !result.number.contains("•")) {
+                        NillBookRepository.recordCall(result.name, result.number)
                         val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${result.number}"))
                         context.startActivity(dialIntent)
+                    }
+                },
+                onMessage = {
+                    if (result.numberVisible && !result.number.contains("•")) {
+                        onOpenChat?.invoke(result.number, result.name)
                     }
                 },
                 onAddContact = {
@@ -333,8 +345,10 @@ fun SearchScreen(
 fun SearchResultCard(
     result: SearchResult,
     onCall: () -> Unit,
+    onMessage: () -> Unit,
     onAddContact: () -> Unit,
     onFriendAction: () -> Unit,
+    onViewProfile: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -348,17 +362,29 @@ fun SearchResultCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(enabled = onViewProfile != null) { onViewProfile?.invoke() }
             ) {
                 InitialsAvatar(name = result.name, size = 52)
                 Spacer(modifier = Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = result.name,
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = result.name,
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "View Profile",
+                            tint = Slate500,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = result.number,
@@ -420,14 +446,28 @@ fun SearchResultCard(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Emerald400),
                         border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Emerald400.copy(alpha = 0.5f))),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         modifier = Modifier.testTag("action_call")
                     ) {
-                        Icon(Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text("Call", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    OutlinedButton(
+                        onClick = onMessage,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan400),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Cyan400.copy(alpha = 0.5f))),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("action_message")
+                    ) {
+                        Icon(Icons.Default.Chat, contentDescription = "Message", modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Message", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
                 }
 
                 OutlinedButton(
