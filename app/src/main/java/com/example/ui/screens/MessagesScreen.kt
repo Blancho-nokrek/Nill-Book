@@ -47,8 +47,10 @@ import kotlinx.coroutines.launch
 fun MessagesScreen(
     initialPhone: String? = null,
     initialName: String? = null,
+    onOpenChat: ((phone: String, name: String) -> Unit)? = null,
     onClearTarget: (() -> Unit)? = null,
     onViewProfile: ((userIdOrPhone: String) -> Unit)? = null,
+    onTriggerCall: ((name: String, phone: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -57,8 +59,8 @@ fun MessagesScreen(
     val contacts by NillBookRepository.userContacts.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var activeConversationPhone by remember { mutableStateOf<String?>(initialPhone) }
-    var activeConversationName by remember { mutableStateOf(initialName ?: "Contact") }
+    var activeConversationPhone by remember(initialPhone) { mutableStateOf(initialPhone) }
+    var activeConversationName by remember(initialName, initialPhone) { mutableStateOf(initialName ?: initialPhone ?: "Contact") }
     var showNewChatDialog by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("ALL") } // "ALL", "PINNED", "UNREAD"
 
@@ -130,112 +132,166 @@ fun MessagesScreen(
                     onViewProfile?.invoke(activeConversationPhone!!)
                 },
                 onTriggerCallDialog = {
-                    callDialogTarget = Pair(activeConversationName, activeConversationPhone!!)
+                    if (onTriggerCall != null) {
+                        onTriggerCall(activeConversationName, activeConversationPhone!!)
+                    } else {
+                        callDialogTarget = Pair(activeConversationName, activeConversationPhone!!)
+                    }
                 }
             )
         } else {
-            Scaffold(
-                containerColor = Slate950,
-                floatingActionButton = {
-                    FloatingActionButton(
-                        onClick = { showNewChatDialog = true },
-                        containerColor = Cyan400,
-                        contentColor = Slate950,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .padding(bottom = 68.dp)
-                            .testTag("fab_new_chat")
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "New Message")
-                    }
-                }
-            ) { padding ->
-                LazyColumn(
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Slate950)
+            ) {
+                // PINNED SECTION: Clean "Chats" title, search box, and filter chips stay pinned when scrolling
+                Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .fillMaxWidth()
+                        .background(Slate950)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    // Header
-                    item {
-                        Column(modifier = Modifier.padding(bottom = 4.dp)) {
-                            Text(
-                                text = LanguageManager.t("chats"),
-                                color = Color.White,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Smart Messaging: Internet VoIP, SMS & MMS",
-                                color = Slate400,
-                                fontSize = 13.sp
-                            )
+                    // "Chats" title near NillBook top
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = LanguageManager.t("chats"),
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val unreadCount = conversations.sumOf { it.unreadCount }
+                        if (unreadCount > 0) {
+                            Surface(
+                                color = Cyan400,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(
+                                    text = "$unreadCount unread",
+                                    color = Slate950,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
 
-                    // Search box
-                    item {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search messages, numbers, or contacts...", color = Slate500, fontSize = 13.sp) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Search, contentDescription = null, tint = Cyan400, modifier = Modifier.size(20.dp))
-                            },
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Default.Clear, contentDescription = null, tint = Slate400, modifier = Modifier.size(18.dp))
-                                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Pinned Search Box
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search messages, numbers, or contacts...", color = Slate500, fontSize = 13.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = Cyan400, modifier = Modifier.size(18.dp))
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = null, tint = Slate400, modifier = Modifier.size(16.dp))
                                 }
-                            },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Cyan400,
-                                unfocusedBorderColor = Slate800,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedContainerColor = Slate900,
-                                unfocusedContainerColor = Slate900
-                            ),
-                            shape = RoundedCornerShape(12.dp),
+                            }
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Cyan400,
+                            unfocusedBorderColor = Slate800,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Slate900,
+                            unfocusedContainerColor = Slate900
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("messages_search_box")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Pinned Quick Filter Chips (All, Pinned, Unread)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "ALL" to "All",
+                            "PINNED" to "Pinned",
+                            "UNREAD" to "Unread"
+                        ).forEach { (key, label) ->
+                            val isSelected = selectedFilter == key
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedFilter = key },
+                                label = { Text(label, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Cyan400,
+                                    selectedLabelColor = Slate950,
+                                    containerColor = Slate900,
+                                    labelColor = Slate300
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = if (isSelected) Cyan400 else Slate800
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Scrollable Content
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // "Start New Conversation" card placed lower down
+                    item {
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("messages_search_box")
-                        )
-                    }
-
-                    // Quick Filter Chips (All, Pinned, Unread)
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showNewChatDialog = true }
+                                .testTag("btn_start_new_conversation"),
+                            colors = CardDefaults.cardColors(containerColor = Slate900.copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(12.dp),
+                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Cyan400.copy(alpha = 0.35f)))
                         ) {
-                            listOf(
-                                "ALL" to "All Chats",
-                                "PINNED" to "Pinned",
-                                "UNREAD" to "Unread"
-                            ).forEach { (key, label) ->
-                                val isSelected = selectedFilter == key
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedFilter = key },
-                                    label = { Text(label, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Cyan400,
-                                        selectedLabelColor = Slate950,
-                                        containerColor = Slate900,
-                                        labelColor = Slate300
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        enabled = true,
-                                        selected = isSelected,
-                                        borderColor = if (isSelected) Cyan400 else Slate800
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(Cyan400.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = Cyan400, modifier = Modifier.size(17.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "Start New Conversation",
+                                        color = Cyan400,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
-                                )
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Slate500, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -261,6 +317,7 @@ fun MessagesScreen(
                                         activeConversationPhone = contact.phone
                                         activeConversationName = contact.name
                                         searchQuery = ""
+                                        onOpenChat?.invoke(contact.phone, contact.name)
                                     },
                                 colors = CardDefaults.cardColors(containerColor = Slate900.copy(alpha = 0.6f)),
                                 shape = RoundedCornerShape(12.dp)
@@ -315,6 +372,7 @@ fun MessagesScreen(
                                 onClick = {
                                     activeConversationPhone = conv.phone
                                     activeConversationName = conv.contactName
+                                    onOpenChat?.invoke(conv.phone, conv.contactName)
                                 },
                                 onAvatarClick = {
                                     onViewProfile?.invoke(conv.phone)
@@ -358,6 +416,7 @@ fun MessagesScreen(
                                         activeConversationPhone = c.phone
                                         activeConversationName = c.name
                                         showNewChatDialog = false
+                                        onOpenChat?.invoke(c.phone, c.name)
                                     }
                                     .padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically

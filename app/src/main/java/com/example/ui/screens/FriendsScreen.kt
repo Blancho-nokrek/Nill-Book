@@ -80,33 +80,29 @@ fun FriendsScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .background(Slate950)
         ) {
-            // Screen Header
-            item {
-                Column {
-                    Text(
-                        text = "FRIENDS",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Friend requests, directory suggestions & verified connections",
-                        color = Slate400,
-                        fontSize = 13.sp
-                    )
-                }
-            }
+            // PINNED SECTION: Header & Tab Switcher stay pinned while scrolling
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Slate950)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                // Screen Header (Clean title without extra subtitle)
+                Text(
+                    text = "FRIENDS",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
-            // 3-Way Segmented Tab Switcher: Requests | Suggestions | My Friends (to the right of suggestions)
-            item {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 3-Way Segmented Tab Switcher: Requests | Suggestions | My Friends
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -139,7 +135,7 @@ fun FriendsScreen(
                         }
                     }
 
-                    // 2. Suggestions Tab (in the middle)
+                    // 2. Suggestions Tab
                     Surface(
                         modifier = Modifier
                             .weight(1f)
@@ -163,7 +159,7 @@ fun FriendsScreen(
                         }
                     }
 
-                    // 3. My Friends Tab (separately on the right of Suggestions!)
+                    // 3. My Friends Tab
                     Surface(
                         modifier = Modifier
                             .weight(1f)
@@ -188,6 +184,15 @@ fun FriendsScreen(
                     }
                 }
             }
+
+            // Scrollable List
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
 
             // Feedback Banner
             if (feedbackMessage != null) {
@@ -482,6 +487,7 @@ fun FriendsScreen(
             }
         }
     }
+}
 }
 
 @Composable

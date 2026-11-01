@@ -50,34 +50,30 @@ fun CallsScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .background(Slate950)
         ) {
-            // Header
-            item {
+            // PINNED SECTION: Header & Filter Chips stay pinned while scrolling
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Slate950)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                // Header (Clean title without extra subtitle)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = LanguageManager.t("calls"),
-                            color = Color.White,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Dual-mode Internet VoIP & SIM Carrier History",
-                            color = Slate400,
-                            fontSize = 13.sp
-                        )
-                    }
+                    Text(
+                        text = LanguageManager.t("calls"),
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
                     if (callLogs.isNotEmpty()) {
                         TextButton(
@@ -91,10 +87,10 @@ fun CallsScreen(
                         }
                     }
                 }
-            }
 
-            // Filter Chips
-            item {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Pinned Filter Chips
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -125,6 +121,15 @@ fun CallsScreen(
                     }
                 }
             }
+
+            // Scrollable Call Logs list
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
 
             // Empty state
             if (filteredLogs.isEmpty()) {
@@ -178,6 +183,7 @@ fun CallsScreen(
             },
             containerColor = Slate900
         )
+    }
     }
 }
 
@@ -263,7 +269,7 @@ fun AdvancedCallLogCard(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = if (log.duration.isNotEmpty()) "${log.timestamp} • Duration: ${log.duration}" else log.timestamp,
+                    text = log.timestamp,
                     color = Slate500,
                     fontSize = 11.sp
                 )

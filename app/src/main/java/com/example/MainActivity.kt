@@ -123,9 +123,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                val isChatActive = isOnline && currentScreen == AppScreen.MESSAGES && !activeChatPhone.isNullOrBlank()
+
                 // Handle back press
                 BackHandler(
-                    enabled = (isOnline && currentScreen != AppScreen.SEARCH) ||
+                    enabled = isChatActive ||
+                            (isOnline && currentScreen != AppScreen.SEARCH) ||
                             showAuthModal ||
                             viewingProfileUserId != null ||
                             globalCallTarget != null
@@ -134,6 +137,9 @@ class MainActivity : ComponentActivity() {
                         globalCallTarget = null
                     } else if (showAuthModal) {
                         showAuthModal = false
+                    } else if (isChatActive) {
+                        activeChatPhone = null
+                        activeChatName = null
                     } else if (viewingProfileUserId != null) {
                         viewingProfileUserId = null
                     } else if (isOnline) {
@@ -154,33 +160,37 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxSize(),
                                 containerColor = Slate950,
                                 topBar = {
-                                    NillBookTopBar(
-                                        currentScreen = currentScreen,
-                                        userName = user?.name ?: "NillBook",
-                                        friendRequestsCount = incomingRequestsCount,
-                                        isOnline = true,
-                                        networkState = networkState,
-                                        onToggleOnlineMode = {
-                                            NetworkMonitor.toggleSimulationMode()
-                                        },
-                                        onProfileClick = {
-                                            viewingProfileUserId = null
-                                            currentScreen = AppScreen.PROFILE
-                                        }
-                                    )
+                                    if (!isChatActive) {
+                                        NillBookTopBar(
+                                            currentScreen = currentScreen,
+                                            userName = user?.name ?: "NillBook",
+                                            friendRequestsCount = incomingRequestsCount,
+                                            isOnline = true,
+                                            networkState = networkState,
+                                            onToggleOnlineMode = {
+                                                NetworkMonitor.toggleSimulationMode()
+                                            },
+                                            onProfileClick = {
+                                                viewingProfileUserId = null
+                                                currentScreen = AppScreen.PROFILE
+                                            }
+                                        )
+                                    }
                                 },
                                 bottomBar = {
-                                    NillBookBottomBar(
-                                        currentScreen = currentScreen,
-                                        friendRequestsCount = incomingRequestsCount,
-                                        unreadMessagesCount = unreadMessagesCount,
-                                        onScreenSelected = { screen ->
-                                            if (screen == AppScreen.PROFILE) {
-                                                viewingProfileUserId = null
+                                    if (!isChatActive) {
+                                        NillBookBottomBar(
+                                            currentScreen = currentScreen,
+                                            friendRequestsCount = incomingRequestsCount,
+                                            unreadMessagesCount = unreadMessagesCount,
+                                            onScreenSelected = { screen ->
+                                                if (screen == AppScreen.PROFILE) {
+                                                    viewingProfileUserId = null
+                                                }
+                                                currentScreen = screen
                                             }
-                                            currentScreen = screen
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             ) { innerPadding ->
                                 Box(
@@ -219,6 +229,10 @@ class MainActivity : ComponentActivity() {
                                                 MessagesScreen(
                                                     initialPhone = activeChatPhone,
                                                     initialName = activeChatName,
+                                                    onOpenChat = { phone, name ->
+                                                        activeChatPhone = phone
+                                                        activeChatName = name
+                                                    },
                                                     onClearTarget = {
                                                         activeChatPhone = null
                                                         activeChatName = null
@@ -226,6 +240,9 @@ class MainActivity : ComponentActivity() {
                                                     onViewProfile = { uidOrPhone ->
                                                         viewingProfileUserId = uidOrPhone
                                                         currentScreen = AppScreen.PROFILE
+                                                    },
+                                                    onTriggerCall = { name, phone ->
+                                                        globalCallTarget = Pair(name, phone)
                                                     }
                                                 )
                                             }

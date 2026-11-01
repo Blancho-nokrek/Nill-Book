@@ -103,15 +103,19 @@ fun ContactsScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .background(Slate950)
         ) {
-            // Header
-            item {
+            // PINNED SECTION: Header, Search field, and Group Chips stay pinned while scrolling
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Slate950)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -125,28 +129,24 @@ fun ContactsScreen(
                                     .padding(end = 8.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Slate900)
-                                    .size(38.dp)
+                                    .size(36.dp)
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Slate200)
                             }
                         }
-                        Column {
-                            Text(
-                                text = LanguageManager.t("contacts"),
-                                color = Color.White,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${contacts.size} directory & device contacts",
-                                color = Slate400,
-                                fontSize = 12.sp
-                            )
-                        }
+                        Text(
+                            text = LanguageManager.t("contacts"),
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
-                    // Action buttons (Import/Export, Merge Duplicates, Add New)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Action buttons (Import/Export, Sync, Add New)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         // Device Contacts Sync button
                         IconButton(
                             onClick = {
@@ -161,10 +161,10 @@ fun ContactsScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(Slate900)
-                                .size(38.dp)
+                                .size(36.dp)
                                 .testTag("sync_device_contacts_btn")
                         ) {
-                            Icon(Icons.Default.Sync, contentDescription = "Sync Device Contacts", tint = Cyan400, modifier = Modifier.size(19.dp))
+                            Icon(Icons.Default.Sync, contentDescription = "Sync Device Contacts", tint = Cyan400, modifier = Modifier.size(18.dp))
                         }
 
                         // Import/Export vCard
@@ -173,10 +173,10 @@ fun ContactsScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(Slate900)
-                                .size(38.dp)
+                                .size(36.dp)
                                 .testTag("import_export_btn")
                         ) {
-                            Icon(Icons.Default.FileUpload, contentDescription = "vCard Import/Export", tint = Slate300, modifier = Modifier.size(19.dp))
+                            Icon(Icons.Default.FileUpload, contentDescription = "vCard Import/Export", tint = Slate300, modifier = Modifier.size(18.dp))
                         }
 
                         // Add Contact Button
@@ -190,56 +190,20 @@ fun ContactsScreen(
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("add_contact_button")
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(17.dp))
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("New", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                     }
                 }
-            }
 
-            // Duplicates Alert Banner if duplicates found
-            if (duplicatesList.isNotEmpty()) {
-                item {
-                    Surface(
-                        color = Amber950.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Amber400.copy(alpha = 0.5f))),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CallMerge, contentDescription = null, tint = Amber400, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text("${duplicatesList.size} Duplicate Contacts Detected", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("Merge duplicates to keep your caller book clean", color = Amber200, fontSize = 11.sp)
-                                }
-                            }
-                            Button(
-                                onClick = { showDuplicatesDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = Amber400, contentColor = Slate950),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier.testTag("merge_duplicates_btn")
-                            ) {
-                                Text("Review & Merge", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // Search / Filter Field
-            item {
+                // Pinned Search / Filter Field
                 OutlinedTextField(
                     value = filterText,
                     onValueChange = { filterText = it },
-                    placeholder = { Text("Filter contacts by name, number or email...", color = Slate500, fontSize = 13.sp) },
+                    placeholder = { Text("Filter contacts by name or number...", color = Slate500, fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Cyan400, modifier = Modifier.size(18.dp)) },
                     trailingIcon = {
                         if (filterText.isNotEmpty()) {
@@ -262,10 +226,10 @@ fun ContactsScreen(
                         .fillMaxWidth()
                         .testTag("contacts_filter_field")
                 )
-            }
 
-            // Contact Group Chips (All, Favorites, Family, Work, Friends, VIP)
-            item {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Pinned Contact Group Chips (All, Favorites, Family, Work, Friends, VIP)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -291,6 +255,15 @@ fun ContactsScreen(
                     }
                 }
             }
+
+            // Scrollable Contacts List
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
 
             // Toast banner
             toastMessage?.let { msg ->
@@ -475,6 +448,7 @@ fun ContactsScreen(
             containerColor = Slate900
         )
     }
+    }
 }
 
 @Composable
@@ -586,24 +560,6 @@ fun AdvancedContactListItem(
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Slate500, modifier = Modifier.size(18.dp))
-                }
-            }
-
-            // Additional info (Secondary phone, email, address)
-            if (!contact.secondaryPhone.isNullOrBlank() || !contact.email.isNullOrBlank() || !contact.address.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = Slate800, thickness = 0.5.dp)
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (!contact.secondaryPhone.isNullOrBlank()) {
-                        Text("Alt: ${contact.secondaryPhone}", color = Slate400, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    }
-                    if (!contact.email.isNullOrBlank()) {
-                        Text(contact.email, color = Slate400, fontSize = 11.sp, maxLines = 1)
-                    }
                 }
             }
         }
