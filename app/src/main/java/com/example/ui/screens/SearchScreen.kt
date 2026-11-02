@@ -103,15 +103,6 @@ fun SearchScreen(
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.sp
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "SMART CALLER DIRECTORY & SEARCH",
-                    color = Cyan400,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 2.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
         }
 

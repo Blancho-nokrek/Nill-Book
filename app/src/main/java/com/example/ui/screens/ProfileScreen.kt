@@ -437,6 +437,95 @@ fun ProfileScreen(
                 }
             }
 
+            // Connection & Dual Mode Controls (Online / Offline Switch)
+            if (isOwnProfile) {
+                item {
+                    val networkState by NetworkMonitor.networkState.collectAsState()
+                    val isAppOnline = networkState.isOnline
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_connection_mode_card"),
+                        colors = CardDefaults.cardColors(containerColor = Slate900),
+                        shape = RoundedCornerShape(16.dp),
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(if (isAppOnline) Cyan400.copy(alpha = 0.4f) else Amber400.copy(alpha = 0.4f))
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = "CONNECTION & OPERATION MODE",
+                                color = if (isAppOnline) Cyan400 else Amber400,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isAppOnline) Cyan400.copy(alpha = 0.15f) else Amber400.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isAppOnline) Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
+                                            contentDescription = null,
+                                            tint = if (isAppOnline) Cyan400 else Amber400,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = if (isAppOnline) "Online Mode Active" else "Offline SIM Mode Active",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (isAppOnline) "Internet messaging, VoIP audio/video calls enabled." else "Cellular voice calls & carrier SMS enabled.",
+                                            color = Slate400,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Switch(
+                                    checked = isAppOnline,
+                                    onCheckedChange = { isChecked ->
+                                        NetworkMonitor.setSimulationOverride(isChecked)
+                                        toastMessage = if (isChecked) "Switched to Online Mode" else "Switched to Offline SIM Mode"
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Slate950,
+                                        checkedTrackColor = Cyan400,
+                                        uncheckedThumbColor = Slate400,
+                                        uncheckedTrackColor = Slate800
+                                    ),
+                                    modifier = Modifier.testTag("profile_screen_online_switch")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Privacy & Account Controls
             if (isOwnProfile) {
                 item {
@@ -860,6 +949,24 @@ fun ProfileSettingsDialog(
                         .heightIn(max = 460.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    // Connection & Operation Mode Switch (Online / Offline)
+                    item {
+                        Text("CONNECTION & OPERATION MODE", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val netState by NetworkMonitor.networkState.collectAsState()
+                        val isOnlineMode = netState.isOnline
+                        SettingToggleRow(
+                            icon = if (isOnlineMode) Icons.Default.Wifi else Icons.Default.SignalCellularAlt,
+                            title = if (isOnlineMode) "Online Mode" else "Offline SIM Mode",
+                            subtitle = if (isOnlineMode) "Connected to internet. VoIP calls & instant messaging active." else "Cellular SIM calls & carrier SMS active.",
+                            checked = isOnlineMode,
+                            onCheckedChange = { checked ->
+                                NetworkMonitor.setSimulationOverride(checked)
+                                onToast(if (checked) "Switched to Online Mode" else "Switched to Offline SIM Mode")
+                            }
+                        )
+                    }
+
                     // Privacy & Caller ID
                     item {
                         Text("PRIVACY & CALLER ID", color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)

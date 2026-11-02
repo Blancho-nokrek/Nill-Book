@@ -99,31 +99,27 @@ class MainActivity : ComponentActivity() {
                     conversations.sumOf { it.unreadCount }
                 }
 
-                // Automatic online/offline transition notifications
+                // Automatic online sync without intrusive top notification banners
                 var previousOnlineState by remember { mutableStateOf<Boolean?>(null) }
                 LaunchedEffect(isOnline) {
                     if (previousOnlineState != null && previousOnlineState != isOnline) {
                         if (isOnline) {
-                            val synced = NillBookRepository.syncOfflineData()
-                            inAppAlertText = "Internet Connected • Online Mode (${networkState.transport.displayName})" +
-                                    if (synced > 0) " • Synced $synced items" else ""
-                        } else {
-                            inAppAlertText = "No Internet Connection • Offline SIM Mode • Drafts Preserved"
+                            NillBookRepository.syncOfflineData()
                         }
                     }
                     previousOnlineState = isOnline
                 }
 
-                // Collect in-app alerts
+                // Collect in-app alerts (Strictly auto-dismisses in 2 seconds)
                 LaunchedEffect(Unit) {
                     NotificationHelper.inAppAlerts.collect { alert ->
                         inAppAlertText = "${alert.title}: ${alert.message}"
-                        delay(3500)
+                        delay(2000L)
                         inAppAlertText = null
                     }
                 }
 
-                val isChatActive = isOnline && currentScreen == AppScreen.MESSAGES && !activeChatPhone.isNullOrBlank()
+                val isChatActive = currentScreen == AppScreen.MESSAGES && !activeChatPhone.isNullOrBlank()
 
                 // Handle back press
                 BackHandler(
@@ -159,11 +155,13 @@ class MainActivity : ComponentActivity() {
                             Scaffold(
                                 modifier = Modifier.fillMaxSize(),
                                 containerColor = Slate950,
+                                contentWindowInsets = if (isChatActive) WindowInsets(0, 0, 0, 0) else androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
                                 topBar = {
                                     if (!isChatActive) {
                                         NillBookTopBar(
                                             currentScreen = currentScreen,
                                             userName = user?.name ?: "NillBook",
+                                            userPhoto = user?.photo,
                                             friendRequestsCount = incomingRequestsCount,
                                             isOnline = true,
                                             networkState = networkState,

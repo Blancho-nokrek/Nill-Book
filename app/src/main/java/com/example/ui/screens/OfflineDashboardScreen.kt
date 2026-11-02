@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -46,6 +48,15 @@ fun OfflineDashboardScreen(
     val activeDraft by NillBookRepository.activeDraftText.collectAsState()
 
     var activeOfflineTab by remember { mutableStateOf(OfflineScreen.CONTACTS) }
+    var offlineActiveChatPhone by remember { mutableStateOf<String?>(null) }
+    var offlineActiveChatName by remember { mutableStateOf<String?>(null) }
+
+    val isOfflineChatActive = activeOfflineTab == OfflineScreen.SMS_MMS && !offlineActiveChatPhone.isNullOrBlank()
+
+    BackHandler(enabled = isOfflineChatActive) {
+        offlineActiveChatPhone = null
+        offlineActiveChatName = null
+    }
 
     // Dialog state for internet-only feature unavailable notice
     var showInternetFeatureNotice by remember { mutableStateOf<String?>(null) }
@@ -58,19 +69,24 @@ fun OfflineDashboardScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        contentWindowInsets = if (isOfflineChatActive) WindowInsets(0, 0, 0, 0) else androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            OfflineTopBar(
-                networkState = networkState,
-                pendingCount = pendingSyncItems.size,
-                onToggleSimulation = { NetworkMonitor.toggleSimulationMode() }
-            )
+            if (!isOfflineChatActive) {
+                OfflineTopBar(
+                    networkState = networkState,
+                    pendingCount = pendingSyncItems.size,
+                    onToggleSimulation = { NetworkMonitor.toggleSimulationMode() }
+                )
+            }
         },
         bottomBar = {
-            OfflineBottomBar(
-                currentTab = activeOfflineTab,
-                pendingCount = pendingSyncItems.size,
-                onTabSelected = { activeOfflineTab = it }
-            )
+            if (!isOfflineChatActive) {
+                OfflineBottomBar(
+                    currentTab = activeOfflineTab,
+                    pendingCount = pendingSyncItems.size,
+                    onTabSelected = { activeOfflineTab = it }
+                )
+            }
         },
         containerColor = Slate950
     ) { innerPadding ->
@@ -87,7 +103,9 @@ fun OfflineDashboardScreen(
                             simCallConfirmationTarget = contact.name to contact.phone
                         },
                         onSmsContact = { contact ->
-                            composingSmsTarget = contact.name to contact.phone
+                            offlineActiveChatPhone = contact.phone
+                            offlineActiveChatName = contact.name
+                            activeOfflineTab = OfflineScreen.SMS_MMS
                         },
                         onInternetFeatureAttempt = { feature ->
                             showInternetFeatureNotice = feature
@@ -97,16 +115,19 @@ fun OfflineDashboardScreen(
                 OfflineScreen.SMS_MMS -> {
                     OfflineSmsTab(
                         conversations = conversations,
-                        activeDraft = activeDraft,
-                        onUpdateDraft = { NillBookRepository.setActiveDraft(it) },
-                        onSendSms = { targetPhone, text, simSlot ->
-                            NillBookRepository.sendMessage(
-                                phone = targetPhone,
-                                contactName = targetPhone,
-                                text = text,
-                                channel = MessageChannel.SMS
-                            )
-                            NillBookRepository.setActiveDraft("")
+                        contacts = userContacts,
+                        activePhone = offlineActiveChatPhone,
+                        activeName = offlineActiveChatName,
+                        onOpenChat = { phone, name ->
+                            offlineActiveChatPhone = phone
+                            offlineActiveChatName = name
+                        },
+                        onClearTarget = {
+                            offlineActiveChatPhone = null
+                            offlineActiveChatName = null
+                        },
+                        onTriggerCall = { name, phone ->
+                            simCallConfirmationTarget = name to phone
                         }
                     )
                 }
@@ -118,16 +139,15 @@ fun OfflineDashboardScreen(
                         }
                     )
                 }
-                OfflineScreen.PENDING_SYNC -> {
-                    OfflinePendingSyncTab(
-                        pendingItems = pendingSyncItems,
-                        onRetrySync = {
-                            val count = NillBookRepository.syncOfflineData()
-                            NotificationHelper.showNotification(
-                                context,
-                                "Sync Attempt",
-                                if (count > 0) "Synchronized $count offline items." else "All offline items are already synchronized."
-                            )
+                OfflineScreen.SAVED_FRIENDS -> {
+                    OfflineSavedFriendsTab(
+                        onCallFriend = { name, phone ->
+                            simCallConfirmationTarget = name to phone
+                        },
+                        onSmsFriend = { name, phone ->
+                            offlineActiveChatPhone = phone
+                            offlineActiveChatName = name
+                            activeOfflineTab = OfflineScreen.SMS_MMS
                         }
                     )
                 }
@@ -528,24 +548,24 @@ fun OfflineBottomBar(
 
             OfflineNavItem(
                 icon = Icons.Default.Dialpad,
-                label = "SIM Calls",
+                label = "Calls",
                 isSelected = currentTab == OfflineScreen.SIM_CALLS,
                 onClick = { onTabSelected(OfflineScreen.SIM_CALLS) },
                 testTag = "offline_tab_calls"
             )
 
             OfflineNavItem(
-                icon = Icons.Default.SyncProblem,
-                label = "Sync Queue",
-                badgeCount = pendingCount,
-                isSelected = currentTab == OfflineScreen.PENDING_SYNC,
-                onClick = { onTabSelected(OfflineScreen.PENDING_SYNC) },
-                testTag = "offline_tab_sync"
+                icon = Icons.Default.People,
+                label = "Friends",
+                badgeCount = 0,
+                isSelected = currentTab == OfflineScreen.SAVED_FRIENDS,
+                onClick = { onTabSelected(OfflineScreen.SAVED_FRIENDS) },
+                testTag = "offline_tab_friends"
             )
 
             OfflineNavItem(
-                icon = Icons.Default.PersonOutline,
-                label = "Local Info",
+                icon = Icons.Default.Settings,
+                label = "Settings",
                 isSelected = currentTab == OfflineScreen.LOCAL_PROFILE,
                 onClick = { onTabSelected(OfflineScreen.LOCAL_PROFILE) },
                 testTag = "offline_tab_profile"
@@ -792,200 +812,190 @@ fun OfflineContactsTab(
 @Composable
 fun OfflineSmsTab(
     conversations: List<ChatConversation>,
-    activeDraft: String,
-    onUpdateDraft: (String) -> Unit,
-    onSendSms: (phone: String, text: String, simSlot: String) -> Unit
+    contacts: List<Contact>,
+    activePhone: String?,
+    activeName: String?,
+    onOpenChat: (phone: String, name: String) -> Unit,
+    onClearTarget: () -> Unit,
+    onTriggerCall: (name: String, phone: String) -> Unit
 ) {
-    val context = LocalContext.current
-    var targetPhone by remember { mutableStateOf("+8801700000000") }
-    var smsText by remember { mutableStateOf(activeDraft) }
-    var selectedSim by remember { mutableStateOf("SIM 1") }
+    var searchQuery by remember { mutableStateOf("") }
+    var showNewSmsDialog by remember { mutableStateOf(false) }
 
-    // Synchronize draft
-    LaunchedEffect(activeDraft) {
-        if (smsText.isEmpty() && activeDraft.isNotEmpty()) {
-            smsText = activeDraft
+    val activeConv = remember(conversations, activePhone) {
+        conversations.find { it.phone == activePhone }
+    }
+
+    val filteredConversations = remember(conversations, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) conversations
+        else conversations.filter {
+            it.contactName.lowercase().contains(q) || it.phone.contains(q) || it.lastMessage.lowercase().contains(q)
         }
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 24.dp)
-    ) {
-        // SMS Compose Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Slate900),
-                shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Amber400.copy(alpha = 0.5f))
+    if (activePhone != null) {
+        ChatDetailView(
+            contactName = activeName ?: activePhone,
+            phone = activePhone,
+            messages = activeConv?.messages ?: emptyList(),
+            isOnline = false,
+            onBack = onClearTarget,
+            onViewProfile = { /* View profile */ },
+            onTriggerCallDialog = {
+                onTriggerCall(activeName ?: activePhone, activePhone)
+            }
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Slate950)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Slate950)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "New Carrier SMS / MMS",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Surface(
-                            color = Amber400.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                "SIM Network Active",
-                                color = Amber400,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                // Pinned Search Box
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Slate950)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search carrier SMS messages...", color = Slate500, fontSize = 13.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = Amber400, modifier = Modifier.size(18.dp))
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = null, tint = Slate400, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Amber400,
+                            unfocusedBorderColor = Slate800,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Slate900,
+                            unfocusedContainerColor = Slate900
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("offline_sms_search_box")
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (filteredConversations.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null, tint = Slate600, modifier = Modifier.size(54.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("No carrier messages yet", color = Slate300, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Tap the message button to compose a carrier SMS", color = Slate500, fontSize = 13.sp)
+                            }
+                        }
+                    } else {
+                        items(filteredConversations, key = { it.phone }) { conv ->
+                            EnhancedConversationCard(
+                                conversation = conv,
+                                onClick = { onOpenChat(conv.phone, conv.contactName) },
+                                onAvatarClick = { onOpenChat(conv.phone, conv.contactName) },
+                                onTogglePin = { NillBookRepository.togglePinConversation(conv.phone) },
+                                onToggleMute = { NillBookRepository.toggleMuteConversation(conv.phone) }
                             )
                         }
                     }
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+            // WhatsApp-style Floating Action Button for Offline SMS
+            FloatingActionButton(
+                onClick = { showNewSmsDialog = true },
+                containerColor = Amber400,
+                contentColor = Slate950,
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .size(56.dp)
+                    .testTag("offline_btn_new_sms")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = "New Carrier SMS",
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        }
 
-                    OutlinedTextField(
-                        value = targetPhone,
-                        onValueChange = { targetPhone = it },
-                        label = { Text("Recipient Phone Number", color = Slate400, fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Amber400,
-                            unfocusedBorderColor = Slate700,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = smsText,
-                        onValueChange = {
-                            smsText = it
-                            onUpdateDraft(it)
-                        },
-                        label = { Text("SMS Message Text", color = Slate400, fontSize = 12.sp) },
-                        placeholder = { Text("Draft preserved across modes...", color = Slate600) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Amber400,
-                            unfocusedBorderColor = Slate700,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Character count & SIM slot
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "${smsText.length} / 160 chars (${if (smsText.length <= 160) 1 else (smsText.length / 153) + 1} SMS)",
-                            color = Slate400,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("SIM 1", "SIM 2").forEach { slot ->
-                                Surface(
+        if (showNewSmsDialog) {
+            AlertDialog(
+                onDismissRequest = { showNewSmsDialog = false },
+                title = { Text("Compose Carrier SMS", color = Color.White, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("Select a contact to message via SIM:", color = Slate400, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(contacts, key = { it.id }) { c ->
+                                Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { selectedSim = slot },
-                                    color = if (selectedSim == slot) Amber400 else Slate800
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Slate950)
+                                        .clickable {
+                                            showNewSmsDialog = false
+                                            onOpenChat(c.phone, c.name)
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        slot,
-                                        color = if (selectedSim == slot) Slate950 else Slate300,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                    ProfileAvatarPlaceholder(name = c.name, size = 38)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(c.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(c.phone, color = Amber400, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                                    }
+                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = Amber400, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Send SMS Button
-                    Button(
-                        onClick = {
-                            if (smsText.isNotBlank()) {
-                                onSendSms(targetPhone, smsText, selectedSim)
-                                smsText = ""
-                                NotificationHelper.showNotification(
-                                    context,
-                                    "Carrier SMS Dispatched",
-                                    "Sent to $targetPhone via $selectedSim"
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Amber400, contentColor = Slate950),
-                        enabled = smsText.isNotBlank()
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Send via $selectedSim (Standard Carrier Rates)", fontWeight = FontWeight.Bold)
+                },
+                confirmButton = {
+                    TextButton(onClick = { showNewSmsDialog = false }) {
+                        Text("Close", color = Amber400)
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Local Message History",
-                color = Slate300,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                },
+                containerColor = Slate900
             )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // List of conversations
-        items(conversations) { conv ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ProfileAvatarPlaceholder(name = conv.contactName, size = 42)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(conv.contactName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text(conv.lastTimestamp, color = Slate500, fontSize = 11.sp)
-                        }
-                        Text(conv.lastMessage, color = Slate400, fontSize = 12.sp, maxLines = 1)
-                    }
-                }
-            }
         }
     }
 }
@@ -995,38 +1005,279 @@ fun OfflineSimCallsTab(
     callLogs: List<CallLogEntry>,
     onDialNumber: (String) -> Unit
 ) {
+    var selectedFilter by remember { mutableStateOf("ALL") }
+    var showClearDialog by remember { mutableStateOf(false) }
+    var showDialpad by remember { mutableStateOf(false) }
     var dialDigits by remember { mutableStateOf("") }
 
-    LazyColumn(
+    val filteredLogs = remember(callLogs, selectedFilter) {
+        when (selectedFilter) {
+            "MISSED" -> callLogs.filter { it.type == CallType.MISSED }
+            "INCOMING" -> callLogs.filter { it.type == CallType.INCOMING }
+            "OUTGOING" -> callLogs.filter { it.type == CallType.OUTGOING }
+            "SIM" -> callLogs.filter { it.mode == CallMode.SIM_CARRIER }
+            else -> callLogs
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 24.dp)
+            .background(Slate950)
     ) {
-        // Dialpad Section
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Slate900),
-                shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Slate800)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Slate950)
+        ) {
+            // Pinned Section: Header & Filters
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Slate950)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Display digits
+                    Text(
+                        text = "CALLS",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (callLogs.isNotEmpty()) {
+                        TextButton(
+                            onClick = { showClearDialog = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Red400),
+                            modifier = Modifier.testTag("offline_clear_calls_btn")
+                        ) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Clear History", fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Pinned Filter Chips (All, Missed, Incoming, Outgoing, SIM)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "ALL" to "All (${callLogs.size})",
+                        "MISSED" to "Missed",
+                        "INCOMING" to "Incoming",
+                        "OUTGOING" to "Outgoing",
+                        "SIM" to "SIM"
+                    ).forEach { (key, label) ->
+                        val isSelected = selectedFilter == key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedFilter = key },
+                            label = { Text(label, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Amber400,
+                                selectedLabelColor = Slate950,
+                                containerColor = Slate900,
+                                labelColor = Slate300
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) Amber400 else Slate800
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Call log items
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (filteredLogs.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.PhoneMissed, contentDescription = null, tint = Slate600, modifier = Modifier.size(54.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("No calls in this category", color = Slate300, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    items(filteredLogs, key = { it.id }) { log ->
+                        val photoUrl = remember(log.phone) {
+                            NillBookRepository.getPhotoForPhone(log.phone)
+                        }
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Slate900),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Slate800)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ProfileAvatarPlaceholder(
+                                    name = log.name,
+                                    size = 42,
+                                    photoUrl = photoUrl
+                                )
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            log.name,
+                                            color = if (log.type == CallType.MISSED) Red400 else Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+
+                                        // Call mode badge
+                                        val (modeText, modeBg, modeFg) = when (log.mode) {
+                                            CallMode.INTERNET_AUDIO -> Triple("Internet", Emerald950, Emerald400)
+                                            CallMode.INTERNET_VIDEO -> Triple("Video", Cyan950, Cyan400)
+                                            CallMode.SIM_CARRIER -> Triple(log.simSlot.ifEmpty { "SIM 1" }, Amber950, Amber400)
+                                        }
+
+                                        Surface(
+                                            color = modeBg,
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                modeText,
+                                                color = modeFg,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        val (icon, tint) = when (log.type) {
+                                            CallType.INCOMING -> Icons.Default.CallReceived to Emerald400
+                                            CallType.OUTGOING -> Icons.Default.CallMade to Cyan400
+                                            CallType.MISSED -> Icons.Default.CallMissed to Red500
+                                        }
+                                        Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(log.phone, color = Slate400, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(log.timestamp, color = Slate500, fontSize = 11.sp)
+                                        if (log.duration.isNotEmpty()) {
+                                            Text(" • ${log.duration}", color = Slate500, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = { onDialNumber(log.phone) },
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(Amber400)
+                                        .testTag("offline_redial_${log.id}")
+                                ) {
+                                    Icon(Icons.Default.Phone, contentDescription = "Redial", tint = Slate950, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Floating Action Button to toggle Dialpad
+        FloatingActionButton(
+            onClick = { showDialpad = !showDialpad },
+            containerColor = Amber400,
+            contentColor = Slate950,
+            shape = CircleShape,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 24.dp)
+                .size(56.dp)
+                .testTag("offline_toggle_dialpad")
+        ) {
+            Icon(Icons.Default.Dialpad, contentDescription = "Dialpad", modifier = Modifier.size(26.dp))
+        }
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear SIM Call History?", color = Color.White) },
+            text = { Text("This will permanently remove your offline SIM call logs from this device.", color = Slate300) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        NillBookRepository.clearCallLogs()
+                        showClearDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red500)
+                ) {
+                    Text("Clear All")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Cancel", color = Slate400) }
+            },
+            containerColor = Slate900
+        )
+    }
+
+    if (showDialpad) {
+        AlertDialog(
+            onDismissRequest = { showDialpad = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("SIM Dialer", color = Color.White, fontWeight = FontWeight.Bold)
+                    IconButton(onClick = { showDialpad = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Slate400)
+                    }
+                }
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = dialDigits.ifEmpty { "Enter phone number" },
                             color = if (dialDigits.isEmpty()) Slate600 else Color.White,
-                            fontSize = 24.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             modifier = Modifier.weight(1f),
@@ -1038,28 +1289,24 @@ fun OfflineSimCallsTab(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Dialpad 3x4 grid
+                    Spacer(modifier = Modifier.height(8.dp))
                     val keypad = listOf(
                         listOf("1" to "", "2" to "ABC", "3" to "DEF"),
                         listOf("4" to "GHI", "5" to "JKL", "6" to "MNO"),
                         listOf("7" to "PQRS", "8" to "TUV", "9" to "WXYZ"),
                         listOf("*" to "", "0" to "+", "#" to "")
                     )
-
                     keypad.forEach { row ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 3.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             row.forEach { (digit, sub) ->
                                 Surface(
                                     modifier = Modifier
-                                        .size(64.dp)
+                                        .size(54.dp)
                                         .clip(CircleShape)
                                         .clickable { dialDigits += digit },
                                     color = Slate800
@@ -1069,197 +1316,138 @@ fun OfflineSimCallsTab(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.Center
                                     ) {
-                                        Text(digit, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                                        if (sub.isNotEmpty()) {
-                                            Text(sub, color = Slate400, fontSize = 9.sp)
-                                        }
+                                        Text(digit, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                        if (sub.isNotEmpty()) Text(sub, color = Slate400, fontSize = 8.sp)
                                     }
                                 }
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Call Button
-                    Button(
-                        onClick = {
-                            if (dialDigits.isNotBlank()) {
-                                onDialNumber(dialDigits)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Amber400, contentColor = Slate950),
-                        shape = RoundedCornerShape(25.dp),
-                        enabled = dialDigits.isNotBlank()
-                    ) {
-                        Icon(Icons.Default.Phone, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Call via Cellular SIM", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
                 }
-            }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (dialDigits.isNotBlank()) {
+                            showDialpad = false
+                            onDialNumber(dialDigits)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Amber400, contentColor = Slate950),
+                    enabled = dialDigits.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Phone, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Call via Cellular SIM", fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Slate900
+        )
+    }
+}
 
-            Spacer(modifier = Modifier.height(16.dp))
+@Composable
+fun OfflineSavedFriendsTab(
+    onCallFriend: (name: String, phone: String) -> Unit,
+    onSmsFriend: (name: String, phone: String) -> Unit
+) {
+    val friendships by NillBookRepository.friendships.collectAsState()
+    val friendsList = remember(friendships) { NillBookRepository.getFriendsList().filter { it.status == "friends" } }
+    var searchQuery by remember { mutableStateOf("") }
 
-            Text(
-                text = "Recent Carrier Calls",
-                color = Slate300,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+    val filteredFriends = remember(friendsList, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) friendsList
+        else friendsList.filter {
+            it.name.lowercase().contains(q) || (it.phone != null && it.phone.contains(q))
         }
+    }
 
-        // Carrier call logs
-        items(callLogs) { log ->
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            // Header Info Card
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Slate900),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Amber400.copy(alpha = 0.3f))
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(if (log.type == CallType.MISSED) Red500.copy(alpha = 0.2f) else Emerald400.copy(alpha = 0.2f)),
+                            .background(Amber400.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = when (log.type) {
-                                CallType.INCOMING -> Icons.Default.CallReceived
-                                CallType.OUTGOING -> Icons.Default.CallMade
-                                CallType.MISSED -> Icons.Default.CallMissed
-                            },
-                            contentDescription = null,
-                            tint = if (log.type == CallType.MISSED) Red500 else Emerald400,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Default.People, contentDescription = null, tint = Amber400, modifier = Modifier.size(20.dp))
                     }
-
                     Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(log.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(log.phone, color = Slate400, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                        Text("${log.simSlot} • ${log.timestamp}", color = Slate500, fontSize = 11.sp)
-                    }
-
-                    IconButton(
-                        onClick = { onDialNumber(log.phone) },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Amber400)
-                    ) {
-                        Icon(Icons.Default.Phone, contentDescription = "Redial", tint = Slate950, modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun OfflinePendingSyncTab(
-    pendingItems: List<PendingSyncItem>,
-    onRetrySync: () -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 14.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 24.dp)
-    ) {
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Slate900),
-                shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Amber400.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.SyncProblem, contentDescription = null, tint = Amber400)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Pending Cloud Synchronization",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "The following items were created or modified while in Offline SIM Mode. Nill Book will automatically synchronize them to the cloud when validated internet connectivity is restored.",
-                        color = Slate300,
-                        fontSize = 12.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Button(
-                        onClick = { onRetrySync() },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Amber400, contentColor = Slate950)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Retry Synchronization Now", fontWeight = FontWeight.Bold)
+                    Column {
+                        Text("Saved Friends (Offline Cache)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Cached from your NillBook online account. You can send SIM SMS or make cellular calls.", color = Slate400, fontSize = 11.sp)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = "Queued Items (${pendingItems.size})",
-                color = Slate300,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+            // Search Field
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("offline_friends_search"),
+                placeholder = { Text("Search saved friends...", color = Slate500, fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Amber400) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Amber400,
+                    unfocusedBorderColor = Slate800,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+
+            Spacer(modifier = Modifier.height(6.dp))
         }
 
-        if (pendingItems.isEmpty()) {
+        if (filteredFriends.isEmpty()) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Slate900.copy(alpha = 0.5f))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 36.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Emerald400, modifier = Modifier.size(36.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("All Offline Data Synced", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("No queued changes waiting for upload.", color = Slate400, fontSize = 12.sp)
-                    }
+                    Icon(Icons.Default.GroupOff, contentDescription = null, tint = Slate600, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        if (searchQuery.isEmpty()) "No saved friends in cache" else "No friends matching \"$searchQuery\"",
+                        color = Slate400,
+                        fontSize = 14.sp
+                    )
                 }
             }
         } else {
-            items(pendingItems, key = { it.id }) { item ->
+            items(filteredFriends, key = { it.userId }) { friend ->
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Slate900),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Slate800)
                 ) {
                     Row(
                         modifier = Modifier
@@ -1267,45 +1455,37 @@ fun OfflinePendingSyncTab(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Amber400.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = when (item.type) {
-                                    SyncItemType.CONTACT -> Icons.Default.PersonAdd
-                                    SyncItemType.MESSAGE -> Icons.AutoMirrored.Filled.Send
-                                    SyncItemType.PROFILE_UPDATE -> Icons.Default.Edit
-                                    SyncItemType.FRIEND_ACTION -> Icons.Default.GroupAdd
-                                },
-                                contentDescription = null,
-                                tint = Amber400,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
+                        ProfileAvatarPlaceholder(name = friend.name, size = 42)
                         Spacer(modifier = Modifier.width(12.dp))
-
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(item.subtitle, color = Slate400, fontSize = 12.sp)
-                            Text("Queued: ${item.timestamp}", color = Slate500, fontSize = 10.sp)
+                            Text(friend.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(friend.phone ?: "Phone hidden", color = Amber400, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                            Text("Cached Friend • NillBook Account", color = Slate500, fontSize = 10.sp)
                         }
 
-                        Surface(
-                            color = Slate800,
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                "QUEUED",
-                                color = Amber200,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                        if (!friend.phone.isNullOrBlank()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                IconButton(
+                                    onClick = { onSmsFriend(friend.name, friend.phone) },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Slate800)
+                                        .testTag("offline_friend_sms_${friend.userId}")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.Message, contentDescription = "SMS", tint = Amber400, modifier = Modifier.size(18.dp))
+                                }
+                                IconButton(
+                                    onClick = { onCallFriend(friend.name, friend.phone) },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Amber400)
+                                        .testTag("offline_friend_call_${friend.userId}")
+                                ) {
+                                    Icon(Icons.Default.Phone, contentDescription = "Call", tint = Slate950, modifier = Modifier.size(18.dp))
+                                }
+                            }
                         }
                     }
                 }
@@ -1328,6 +1508,106 @@ fun OfflineProfileTab(
         contentPadding = PaddingValues(top = 10.dp, bottom = 24.dp)
     ) {
         item {
+            // Connection & Operation Mode Switch (Online / Offline)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .testTag("offline_connection_mode_card"),
+                colors = CardDefaults.cardColors(containerColor = Slate900),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Amber400.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "CONNECTION & OPERATION MODE",
+                        color = Amber400,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Amber400.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SignalCellularAlt,
+                                    contentDescription = null,
+                                    tint = Amber400,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Offline SIM Mode Active",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Switch ON to connect to Internet and activate Online Mode.",
+                                    color = Slate400,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = false,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    NetworkMonitor.setSimulationOverride(true)
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Slate950,
+                                checkedTrackColor = Cyan400,
+                                uncheckedThumbColor = Slate400,
+                                uncheckedTrackColor = Slate800
+                            ),
+                            modifier = Modifier.testTag("offline_profile_online_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = { NetworkMonitor.setSimulationOverride(true) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("offline_switch_to_online_btn"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Switch to Online Mode", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+
+        item {
             // Local Profile Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1337,7 +1617,11 @@ fun OfflineProfileTab(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ProfileAvatarPlaceholder(name = user?.name ?: "User", size = 54)
+                        ProfileAvatarPlaceholder(
+                            name = user?.name ?: "User",
+                            size = 54,
+                            photoUrl = user?.photo
+                        )
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text(user?.name ?: "User", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)

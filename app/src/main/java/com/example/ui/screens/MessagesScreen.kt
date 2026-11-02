@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -62,7 +63,8 @@ fun MessagesScreen(
     var activeConversationPhone by remember(initialPhone) { mutableStateOf(initialPhone) }
     var activeConversationName by remember(initialName, initialPhone) { mutableStateOf(initialName ?: initialPhone ?: "Contact") }
     var showNewChatDialog by remember { mutableStateOf(false) }
-    var selectedFilter by remember { mutableStateOf("ALL") } // "ALL", "PINNED", "UNREAD"
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("ALL") } // "ALL", "GROUPS", "UNREAD"
 
     // Call dialog state
     var callDialogTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -71,6 +73,8 @@ fun MessagesScreen(
         if (!initialPhone.isNullOrBlank()) {
             activeConversationPhone = initialPhone
             activeConversationName = initialName ?: initialPhone
+        } else {
+            activeConversationPhone = null
         }
     }
 
@@ -82,8 +86,8 @@ fun MessagesScreen(
     val filteredConversations = remember(conversations, searchQuery, selectedFilter) {
         val q = searchQuery.trim().lowercase()
         var list = conversations
-        if (selectedFilter == "PINNED") {
-            list = list.filter { it.isPinned }
+        if (selectedFilter == "GROUPS") {
+            list = list.filter { it.isGroup }
         } else if (selectedFilter == "UNREAD") {
             list = list.filter { it.unreadCount > 0 }
         }
@@ -111,6 +115,12 @@ fun MessagesScreen(
     BackHandler(enabled = activeConversationPhone != null) {
         activeConversationPhone = null
         onClearTarget?.invoke()
+    }
+
+    LaunchedEffect(activeConversationPhone) {
+        if (activeConversationPhone != null) {
+            onOpenChat?.invoke(activeConversationPhone!!, activeConversationName)
+        }
     }
 
     Box(
@@ -145,44 +155,13 @@ fun MessagesScreen(
                     .fillMaxSize()
                     .background(Slate950)
             ) {
-                // PINNED SECTION: Clean "Chats" title, search box, and filter chips stay pinned when scrolling
+                // PINNED SECTION: Search box and filter chips stay pinned when scrolling
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Slate950)
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    // "Chats" title near NillBook top
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = LanguageManager.t("chats"),
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        val unreadCount = conversations.sumOf { it.unreadCount }
-                        if (unreadCount > 0) {
-                            Surface(
-                                color = Cyan400,
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(
-                                    text = "$unreadCount unread",
-                                    color = Slate950,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     // Pinned Search Box
                     OutlinedTextField(
                         value = searchQuery,
@@ -222,7 +201,7 @@ fun MessagesScreen(
                     ) {
                         listOf(
                             "ALL" to "All",
-                            "PINNED" to "Pinned",
+                            "GROUPS" to "Groups",
                             "UNREAD" to "Unread"
                         ).forEach { (key, label) ->
                             val isSelected = selectedFilter == key
@@ -254,47 +233,6 @@ fun MessagesScreen(
                     contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // "Start New Conversation" card placed lower down
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { showNewChatDialog = true }
-                                .testTag("btn_start_new_conversation"),
-                            colors = CardDefaults.cardColors(containerColor = Slate900.copy(alpha = 0.6f)),
-                            shape = RoundedCornerShape(12.dp),
-                            border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Cyan400.copy(alpha = 0.35f)))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .background(Cyan400.copy(alpha = 0.15f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = Cyan400, modifier = Modifier.size(17.dp))
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = "Start New Conversation",
-                                        color = Cyan400,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Slate500, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
 
                     // Matching Directory Contacts
                     if (matchingContacts.isNotEmpty()) {
@@ -386,7 +324,33 @@ fun MessagesScreen(
                             )
                         }
                     }
+
                 }
+            }
+
+            // WhatsApp-style Floating Action Button (FAB)
+            FloatingActionButton(
+                onClick = {
+                    if (selectedFilter == "GROUPS") {
+                        showCreateGroupDialog = true
+                    } else {
+                        showNewChatDialog = true
+                    }
+                },
+                containerColor = Cyan400,
+                contentColor = Slate950,
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 24.dp)
+                    .size(56.dp)
+                    .testTag(if (selectedFilter == "GROUPS") "btn_create_new_group" else "btn_start_new_conversation")
+            ) {
+                Icon(
+                    imageVector = if (selectedFilter == "GROUPS") Icons.Default.GroupAdd else Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = if (selectedFilter == "GROUPS") "Create New Group" else "Start New Conversation",
+                    modifier = Modifier.size(26.dp)
+                )
             }
         }
     }
@@ -442,6 +406,21 @@ fun MessagesScreen(
         )
     }
 
+    // Create Group Dialog
+    if (showCreateGroupDialog) {
+        CreateGroupDialog(
+            contacts = contacts,
+            onDismiss = { showCreateGroupDialog = false },
+            onCreateGroup = { name, members ->
+                val newGroup = NillBookRepository.createGroupConversation(name, members)
+                showCreateGroupDialog = false
+                activeConversationPhone = newGroup.phone
+                activeConversationName = newGroup.contactName
+                onOpenChat?.invoke(newGroup.phone, newGroup.contactName)
+            }
+        )
+    }
+
     // Call Options Dialog triggered from anywhere in Messages
     callDialogTarget?.let { (targetName, targetPhone) ->
         SmartCallOptionDialog(
@@ -494,9 +473,13 @@ fun EnhancedConversationCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(contentAlignment = Alignment.BottomEnd) {
+                val contactPhoto = remember(conversation.phone) {
+                    NillBookRepository.getPhotoForPhone(conversation.phone)
+                }
                 ProfileAvatarPlaceholder(
                     name = conversation.contactName,
                     size = 48,
+                    photoUrl = contactPhoto,
                     modifier = if (onAvatarClick != null) Modifier.clickable { onAvatarClick() } else Modifier
                 )
                 if (conversation.isOnline) {
@@ -593,9 +576,13 @@ fun ChatDetailView(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // 3 Smart Messaging Options: INTERNET, SMS, MMS
+    val isRegisteredContact = remember(phone) {
+        phone.startsWith("group_") || NillBookRepository.isUserRegistered(phone)
+    }
+
+    // 3 Smart Messaging Options: INTERNET, SMS, MMS (INTERNET only if registered on NillBook)
     var selectedChannel by remember {
-        mutableStateOf(if (isOnline) MessageChannel.INTERNET else MessageChannel.SMS)
+        mutableStateOf(if (isOnline && isRegisteredContact) MessageChannel.INTERNET else MessageChannel.SMS)
     }
 
     var replyingToMessage by remember { mutableStateOf<ChatMessage?>(null) }
@@ -607,6 +594,9 @@ fun ChatDetailView(
     var audioSeconds by remember { mutableStateOf(0) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var selectedSimSlot by remember { mutableStateOf("SIM 1") }
+    var isMuted by remember { mutableStateOf(false) }
+    var showInChatSearch by remember { mutableStateOf(false) }
+    var inChatSearchQuery by remember { mutableStateOf("") }
 
     // Media Picker for Images and MMS
     val photoPicker = rememberLauncherForActivityResult(
@@ -629,9 +619,13 @@ fun ChatDetailView(
         }
     }
 
-    // Automatically update default channel when online status shifts
-    LaunchedEffect(isOnline) {
-        if (isOnline && selectedChannel == MessageChannel.SMS) {
+    // Automatically update default channel when online status or contact registration shifts
+    LaunchedEffect(isOnline, isRegisteredContact) {
+        if (!isRegisteredContact) {
+            if (selectedChannel == MessageChannel.INTERNET) {
+                selectedChannel = MessageChannel.SMS
+            }
+        } else if (isOnline && selectedChannel == MessageChannel.SMS) {
             selectedChannel = MessageChannel.INTERNET
         } else if (!isOnline && selectedChannel == MessageChannel.INTERNET) {
             selectedChannel = MessageChannel.SMS
@@ -641,111 +635,197 @@ fun ChatDetailView(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = Slate950,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            // Pinned Top Bar: Profile Information + Audio Call + Video Call (remains pinned while chat scrolls underneath)
-            Surface(
-                color = Slate900,
-                shadowElevation = 3.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Slate800)
+            // 1. PINNED TOP BAR (Status bar padded, strictly fixed, all 5 items: Back, Avatar/Name/Status, Audio Call, Video Call, 3-Dots)
+        Surface(
+            color = Slate900,
+            shadowElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Slate800),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .height(58.dp)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TopAppBar(
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onViewProfile() }
-                                .padding(vertical = 4.dp, horizontal = 2.dp)
-                        ) {
-                            ProfileAvatarPlaceholder(name = contactName, size = 38)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = contactName,
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(7.dp)
-                                            .clip(CircleShape)
-                                            .background(if (isOnline) Emerald400 else Slate500)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = if (isOnline) "Online" else "Offline",
-                                        color = if (isOnline) Emerald400 else Slate400,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                        }
-                    },
-                    actions = {
-                        // Pinned Audio Call Button
-                        IconButton(
-                            onClick = onTriggerCallDialog,
-                            modifier = Modifier.testTag("chat_audio_call_btn")
-                        ) {
-                            Icon(Icons.Default.Call, contentDescription = "Audio Call", tint = Emerald400)
-                        }
+                // 1) Back Button
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .testTag("chat_back_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
 
-                        // Pinned Video Call Button
-                        IconButton(
+                // 2) Profile Avatar + Name + Online Status (Clickable to open profile)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onViewProfile() }
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val photoUrl = remember(phone) {
+                        NillBookRepository.getPhotoForPhone(phone)
+                    }
+                    ProfileAvatarPlaceholder(name = contactName, size = 38, photoUrl = photoUrl)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = contactName,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (!phone.startsWith("group_")) {
+                            Text(
+                                text = phone,
+                                color = Slate400,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                // 3) Audio Call Button
+                IconButton(
+                    onClick = onTriggerCallDialog,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .testTag("chat_audio_call_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = "Audio Call",
+                        tint = Emerald400
+                    )
+                }
+
+                // 4) Video Call Button
+                IconButton(
+                    onClick = {
+                        if (isOnline && isRegisteredContact) {
+                            NillBookRepository.startInternetCall(contactName, phone, CallMode.INTERNET_VIDEO)
+                        } else {
+                            onTriggerCallDialog()
+                        }
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .testTag("chat_video_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = "Video Call",
+                        tint = Cyan400
+                    )
+                }
+
+                // 5) 3-Dots Menu Button (Standard Messaging Menu)
+                Box {
+                    IconButton(
+                        onClick = { showChatMenu = true },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("chat_more_menu_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More Options",
+                            tint = Slate300
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showChatMenu,
+                        onDismissRequest = { showChatMenu = false },
+                        modifier = Modifier.background(Slate900)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("View Contact", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Cyan400) },
                             onClick = {
-                                if (isOnline) {
-                                    NillBookRepository.startInternetCall(contactName, phone, CallMode.INTERNET_VIDEO)
-                                } else {
-                                    onTriggerCallDialog()
-                                }
-                            },
-                            modifier = Modifier.testTag("chat_video_btn")
-                        ) {
-                            Icon(Icons.Default.Videocam, contentDescription = "Video Call", tint = Cyan400)
-                        }
-
-                        Box {
-                            IconButton(onClick = { showChatMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Slate300)
+                                showChatMenu = false
+                                onViewProfile()
                             }
-                            DropdownMenu(
-                                expanded = showChatMenu,
-                                onDismissRequest = { showChatMenu = false },
-                                modifier = Modifier.background(Slate900)
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Clear Chat", color = Red400) },
-                                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Red400) },
-                                    onClick = {
-                                        showChatMenu = false
-                                        showClearConfirm = true
-                                    }
-                                )
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Media, Links & Docs", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.PermMedia, contentDescription = null, tint = Cyan400) },
+                            onClick = {
+                                showChatMenu = false
+                                val mediaCount = messages.count { it.attachmentUrl != null }
+                                toastMessage = "Shared Media: $mediaCount attachments in chat"
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Slate900)
-                )
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (showInChatSearch) "Close Search" else "Search in Chat", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Cyan400) },
+                            onClick = {
+                                showChatMenu = false
+                                showInChatSearch = !showInChatSearch
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isMuted) "Unmute Notifications" else "Mute Notifications", color = Color.White) },
+                            leadingIcon = { Icon(if (isMuted) Icons.Default.Notifications else Icons.Default.NotificationsOff, contentDescription = null, tint = Slate300) },
+                            onClick = {
+                                showChatMenu = false
+                                NillBookRepository.toggleMuteConversation(phone)
+                                isMuted = !isMuted
+                                toastMessage = if (isMuted) "Notifications muted" else "Notifications unmuted"
+                            }
+                        )
+                        HorizontalDivider(color = Slate800)
+                        DropdownMenuItem(
+                            text = { Text("Clear Chat", color = Red400) },
+                            leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Red400) },
+                            onClick = {
+                                showChatMenu = false
+                                showClearConfirm = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Block Contact", color = Red400) },
+                            leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = Red400) },
+                            onClick = {
+                                showChatMenu = false
+                                NillBookRepository.blockUser(phone)
+                                toastMessage = "Contact $contactName blocked"
+                            }
+                        )
+                    }
+                }
             }
-        },
-        bottomBar = {
+        }
+    },
+    bottomBar = {
+            // 3. PINNED BOTTOM INPUT BAR (Accommodates navigation bar and keyboard)
             Surface(
                 color = Slate900,
-                modifier = Modifier.fillMaxWidth()
+                border = androidx.compose.foundation.BorderStroke(1.dp, Slate800),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .navigationBarsPadding()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     // Clean, compact channel selector & SIM slot selector
@@ -754,9 +834,33 @@ fun ChatDetailView(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Channel Badges: Internet, SMS, MMS
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            MessageChannel.values().forEach { channel ->
+                        // Channel Badges: Internet, SMS, MMS (Internet only if contact is registered on NillBook)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val availableChannels = remember(isOnline, isRegisteredContact) {
+                                if (isRegisteredContact) {
+                                    if (isOnline) listOf(MessageChannel.INTERNET, MessageChannel.SMS, MessageChannel.MMS)
+                                    else listOf(MessageChannel.SMS, MessageChannel.MMS)
+                                } else {
+                                    listOf(MessageChannel.SMS, MessageChannel.MMS)
+                                }
+                            }
+
+                            if (!isRegisteredContact) {
+                                Surface(
+                                    color = Amber400.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        "SIM Contact",
+                                        color = Amber400,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            availableChannels.forEach { channel ->
                                 val isSelected = selectedChannel == channel
                                 val bg = when (channel) {
                                     MessageChannel.INTERNET -> if (isSelected) Cyan400 else Slate800
@@ -769,11 +873,7 @@ fun ChatDetailView(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
-                                            if (channel == MessageChannel.INTERNET && !isOnline) {
-                                                toastMessage = "Internet is offline. Switched to SMS mode."
-                                            } else {
-                                                selectedChannel = channel
-                                            }
+                                            selectedChannel = channel
                                         }
                                         .testTag("channel_${channel.name.lowercase()}"),
                                     color = bg
@@ -1010,11 +1110,12 @@ fun ChatDetailView(
                 }
             }
         }
-    ) { padding ->
+    ) { innerPadding ->
+        // 2. MIDDLE MESSAGES AREA (Scrolls independently between pinned top and bottom bars)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(innerPadding)
         ) {
             LazyColumn(
                 state = listState,
@@ -1024,7 +1125,6 @@ fun ChatDetailView(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-
                 items(messages, key = { it.id }) { msg ->
                     InteractiveMessageBubble(
                         message = msg,
@@ -1275,4 +1375,115 @@ fun InteractiveMessageBubble(
             }
         }
     }
+}
+
+@Composable
+fun CreateGroupDialog(
+    contacts: List<Contact>,
+    onDismiss: () -> Unit,
+    onCreateGroup: (name: String, members: List<String>) -> Unit
+) {
+    var groupName by remember { mutableStateOf("") }
+    val selectedMembers = remember { mutableStateListOf<String>() }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create New Group", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = groupName,
+                    onValueChange = { groupName = it },
+                    label = { Text("Group Name *", color = Slate400) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Cyan400,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_group_name")
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Select Members (${selectedMembers.size} selected):", color = Slate300, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 240.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(contacts, key = { it.id }) { c ->
+                        val isSelected = selectedMembers.contains(c.phone)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Slate800 else Slate950)
+                                .clickable {
+                                    if (isSelected) selectedMembers.remove(c.phone)
+                                    else selectedMembers.add(c.phone)
+                                }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    if (checked) selectedMembers.add(c.phone)
+                                    else selectedMembers.remove(c.phone)
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = Cyan400,
+                                    checkmarkColor = Slate950
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            ProfileAvatarPlaceholder(name = c.name, size = 32)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(c.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(c.phone, color = Cyan400, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+                }
+
+                errorText?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(it, color = Red400, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (groupName.isBlank()) {
+                        errorText = "Please enter a group name"
+                    } else if (selectedMembers.isEmpty()) {
+                        errorText = "Please select at least 1 member"
+                    } else {
+                        onCreateGroup(groupName.trim(), selectedMembers.toList())
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
+                modifier = Modifier.testTag("btn_confirm_create_group")
+            ) {
+                Text("Create Group", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Slate400)
+            }
+        },
+        containerColor = Slate900
+    )
 }

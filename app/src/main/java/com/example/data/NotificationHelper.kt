@@ -12,6 +12,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -124,9 +128,17 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setTimeoutAfter(2000L)
 
         try {
             NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            // Guarantee cancellation after 2 seconds
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                kotlinx.coroutines.delay(2000L)
+                try {
+                    NotificationManagerCompat.from(context).cancel(notificationId)
+                } catch (_: Exception) {}
+            }
         } catch (_: SecurityException) {
             // Handled safely
         }

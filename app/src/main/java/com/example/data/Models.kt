@@ -142,7 +142,9 @@ data class ChatConversation(
     val isArchived: Boolean = false,
     val isMuted: Boolean = false,
     val isOnline: Boolean = true,
-    val messages: List<ChatMessage> = emptyList()
+    val messages: List<ChatMessage> = emptyList(),
+    val isGroup: Boolean = false,
+    val groupMembers: List<String> = emptyList()
 )
 
 enum class CallType {
@@ -216,7 +218,7 @@ enum class OfflineScreen(val titleKey: String) {
     CONTACTS("contacts"),
     SMS_MMS("sms_mms"),
     SIM_CALLS("sim_calls"),
-    PENDING_SYNC("pending_sync"),
+    SAVED_FRIENDS("friends"),
     LOCAL_PROFILE("local_profile")
 }
 

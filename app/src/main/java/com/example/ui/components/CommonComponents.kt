@@ -46,6 +46,7 @@ fun NillBookTopBar(
     isOnline: Boolean,
     onToggleOnlineMode: () -> Unit,
     onProfileClick: () -> Unit,
+    userPhoto: String? = null,
     onLanguageClick: (() -> Unit)? = null,
     networkState: NetworkState? = null,
     modifier: Modifier = Modifier
@@ -77,7 +78,7 @@ fun NillBookTopBar(
                             .clip(RoundedCornerShape(8.dp))
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "NILLBOOK",
                             color = Cyan400,
@@ -85,74 +86,36 @@ fun NillBookTopBar(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp
                         )
-                        Text(
-                            text = "SMART CALLER & MESSENGER",
-                            color = Slate400,
-                            fontSize = 8.sp,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
+                        if (currentScreen == AppScreen.MESSAGES) {
+                            Text(
+                                text = " • CHATS",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
                 }
 
-                // Action Controls on Right: Online Mode Badge + Profile
+                // Action Controls on Right: Profile with User Photo
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Online / Offline Dual Mode Interactive Pill
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = onToggleOnlineMode)
-                            .testTag("toggle_online_mode_btn"),
-                        color = if (isOnline) Emerald950.copy(alpha = 0.7f) else Amber950.copy(alpha = 0.7f),
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(if (isOnline) Emerald400.copy(alpha = 0.5f) else Amber400.copy(alpha = 0.5f))
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isOnline) Emerald400 else Amber400)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            val transportLabel = networkState?.transport?.displayName ?: "Wi-Fi"
-                            Text(
-                                text = if (isOnline) "ONLINE ($transportLabel)" else "OFFLINE (SIM Mode)",
-                                color = if (isOnline) Emerald400 else Amber400,
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    // Profile Avatar icon button
+                    // Profile Avatar icon button (Displays real profile photo in top corner)
                     Box(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(if (currentScreen == AppScreen.PROFILE) Cyan400.copy(alpha = 0.2f) else Slate800)
-                            .border(
-                                width = 1.5.dp,
-                                color = if (currentScreen == AppScreen.PROFILE) Cyan400 else Slate700,
-                                shape = CircleShape
-                            )
                             .clickable(onClick = onProfileClick)
                             .testTag("topbar_profile_button"),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = userName.take(1).uppercase(),
-                            color = if (currentScreen == AppScreen.PROFILE) Cyan400 else Slate300,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                        ProfileAvatarPlaceholder(
+                            name = userName,
+                            size = 38,
+                            photoUrl = userPhoto
                         )
                         if (friendRequestsCount > 0) {
                             Box(

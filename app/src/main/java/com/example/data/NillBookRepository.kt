@@ -284,6 +284,55 @@ object NillBookRepository {
     data class CrowdsourcedEntry(val phone: String, val name: String, var count: Int)
     data class FriendshipEntry(val id: String, val requesterId: String, val addresseeId: String, var status: String)
 
+    init {
+        syncFriendsToContacts()
+    }
+
+    fun isUserRegistered(phone: String): Boolean {
+        val clean = phone.replace(" ", "").replace("-", "")
+        return registeredUsers.any { it.phone.replace(" ", "").replace("-", "") == clean } ||
+                _userContacts.value.any { it.phone.replace(" ", "").replace("-", "") == clean && it.isRegisteredOnNillBook }
+    }
+
+    fun syncFriendsToContacts() {
+        val me = _currentUser.value ?: return
+        val current = _userContacts.value.toMutableList()
+        val friendList = getFriendsList().filter { it.status == "friends" }
+        var changed = false
+        for (friend in friendList) {
+            val phone = friend.phone ?: continue
+            val cleanPhone = phone.replace(" ", "").replace("-", "")
+            val existingIndex = current.indexOfFirst {
+                val c = it.phone.replace(" ", "").replace("-", "")
+                c == cleanPhone || it.name.equals(friend.name, ignoreCase = true)
+            }
+            if (existingIndex == -1) {
+                current.add(
+                    Contact(
+                        id = "friend_${friend.userId}",
+                        name = friend.name,
+                        phone = phone,
+                        isFavorite = true,
+                        group = ContactGroup.FRIENDS,
+                        isRegisteredOnNillBook = true,
+                        isOnline = friend.isOnline,
+                        syncStatus = SyncStatus.SYNCED
+                    )
+                )
+                changed = true
+            } else {
+                val ex = current[existingIndex]
+                if (!ex.isRegisteredOnNillBook) {
+                    current[existingIndex] = ex.copy(isRegisteredOnNillBook = true, isOnline = friend.isOnline)
+                    changed = true
+                }
+            }
+        }
+        if (changed) {
+            _userContacts.value = current
+        }
+    }
+
     // Authentication
     fun login(identifier: String, country: String): Boolean {
         val trimmed = identifier.trim()
@@ -395,6 +444,27 @@ object NillBookRepository {
         if (_currentUser.value?.phone == phone) return _currentUser.value
         val e164 = PhoneUtils.toE164(phone) ?: phone
         return registeredUsers.find { it.phone == phone || it.phone == e164 }
+    }
+
+    fun getContactByPhone(phone: String): Contact? {
+        val clean = phone.replace(" ", "").replace("-", "")
+        return _userContacts.value.firstOrNull {
+            it.phone.replace(" ", "").replace("-", "") == clean
+        }
+    }
+
+    fun getPhotoForPhone(phone: String): String? {
+        if (_currentUser.value?.phone == phone) return _currentUser.value?.photo
+        val clean = phone.replace(" ", "").replace("-", "")
+        val contactPhoto = _userContacts.value.firstOrNull {
+            it.phone.replace(" ", "").replace("-", "") == clean
+        }?.photo
+        if (!contactPhoto.isNullOrBlank()) return contactPhoto
+        val userPhoto = registeredUsers.firstOrNull {
+            it.phone.replace(" ", "").replace("-", "") == clean
+        }?.photo
+        if (!userPhoto.isNullOrBlank()) return userPhoto
+        return null
     }
 
     // Contact Operations
@@ -685,6 +755,7 @@ object NillBookRepository {
         val list = _friendships.value.toMutableList()
         list.find { it.id == requestId }?.status = "ACCEPTED"
         _friendships.value = list
+        syncFriendsToContacts()
     }
 
     fun declineFriendRequest(requestId: String) {
@@ -849,10 +920,60 @@ object NillBookRepository {
                         status = MessageDeliveryStatus.DELIVERED
                     )
                 )
+            ),
+            ChatConversation(
+                id = "conv_group_friends",
+                contactName = "NillBook Friends Circle",
+                phone = "group_friends_1",
+                lastMessage = "Welcome everyone to our group!",
+                lastTimestamp = "11:20 AM",
+                unreadCount = 0,
+                isPinned = false,
+                isOnline = true,
+                isGroup = true,
+                groupMembers = listOf("+8801700000000", "+8801819876543"),
+                messages = listOf(
+                    ChatMessage(
+                        id = "gm1",
+                        text = "Welcome everyone to our group!",
+                        timestamp = "11:20 AM",
+                        isFromMe = true,
+                        channel = MessageChannel.INTERNET,
+                        status = MessageDeliveryStatus.READ
+                    )
+                )
             )
         )
     )
     val conversations: StateFlow<List<ChatConversation>> = _conversations.asStateFlow()
+
+    fun createGroupConversation(name: String, memberPhones: List<String>): ChatConversation {
+        val groupId = "group_${UUID.randomUUID().toString().take(8)}"
+        val newGroup = ChatConversation(
+            id = groupId,
+            contactName = name,
+            phone = groupId,
+            lastMessage = "Group created",
+            lastTimestamp = "Just now",
+            unreadCount = 0,
+            isPinned = false,
+            isOnline = true,
+            isGroup = true,
+            groupMembers = memberPhones,
+            messages = listOf(
+                ChatMessage(
+                    id = "msg_grp_${UUID.randomUUID().toString().take(6)}",
+                    text = "Welcome to $name group! Created with ${memberPhones.size} members.",
+                    timestamp = "Just now",
+                    isFromMe = true,
+                    channel = MessageChannel.INTERNET,
+                    status = MessageDeliveryStatus.SENT
+                )
+            )
+        )
+        _conversations.value = listOf(newGroup) + _conversations.value
+        return newGroup
+    }
 
     fun sendMessage(
         phone: String,

@@ -62,15 +62,28 @@ fun ContactsScreen(
     var callDialogTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     // Read Contacts Runtime Permission launcher
+    // Read Contacts Runtime Permission launcher - Auto imports on permission grant
     val requestContactsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
             val deviceList = DeviceContactsHelper.readDeviceContacts(context)
             val count = NillBookRepository.importDeviceContacts(deviceList)
-            toastMessage = "Imported $count contacts from phone book!"
+            if (count > 0) {
+                toastMessage = "Auto-synced $count contacts from phone!"
+            }
+        }
+    }
+
+    // Auto-request contact permission on launch and load device contacts automatically
+    LaunchedEffect(Unit) {
+        if (DeviceContactsHelper.hasContactsPermission(context)) {
+            val deviceList = DeviceContactsHelper.readDeviceContacts(context)
+            if (deviceList.isNotEmpty()) {
+                NillBookRepository.importDeviceContacts(deviceList)
+            }
         } else {
-            toastMessage = "Contacts permission denied. You can import manually via .vcf"
+            requestContactsPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
         }
     }
 
@@ -115,86 +128,29 @@ fun ContactsScreen(
                     .background(Slate950)
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                // Header
+                // Header (Clean, reload/upload buttons removed)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (onBack != null) {
-                            IconButton(
-                                onClick = onBack,
-                                modifier = Modifier
-                                    .padding(end = 8.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Slate900)
-                                    .size(36.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Slate200)
-                            }
-                        }
-                        Text(
-                            text = LanguageManager.t("contacts"),
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Action buttons (Import/Export, Sync, Add New)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Device Contacts Sync button
+                    if (onBack != null) {
                         IconButton(
-                            onClick = {
-                                if (DeviceContactsHelper.hasContactsPermission(context)) {
-                                    val deviceList = DeviceContactsHelper.readDeviceContacts(context)
-                                    val count = NillBookRepository.importDeviceContacts(deviceList)
-                                    toastMessage = "Synced $count contacts from phone!"
-                                } else {
-                                    requestContactsPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
-                                }
-                            },
+                            onClick = onBack,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(Slate900)
                                 .size(36.dp)
-                                .testTag("sync_device_contacts_btn")
                         ) {
-                            Icon(Icons.Default.Sync, contentDescription = "Sync Device Contacts", tint = Cyan400, modifier = Modifier.size(18.dp))
-                        }
-
-                        // Import/Export vCard
-                        IconButton(
-                            onClick = { showImportExportDialog = true },
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Slate900)
-                                .size(36.dp)
-                                .testTag("import_export_btn")
-                        ) {
-                            Icon(Icons.Default.FileUpload, contentDescription = "vCard Import/Export", tint = Slate300, modifier = Modifier.size(18.dp))
-                        }
-
-                        // Add Contact Button
-                        Button(
-                            onClick = {
-                                editingContact = null
-                                showContactDialog = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Cyan400, contentColor = Slate950),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("add_contact_button")
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("New", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Slate200)
                         }
                     }
+                    Text(
+                        text = LanguageManager.t("contacts"),
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -328,6 +284,29 @@ fun ContactsScreen(
         }
     }
 
+    // WhatsApp-style Floating Action Button (FAB) at bottom-right corner for New Contact
+    FloatingActionButton(
+        onClick = {
+            editingContact = null
+            showContactDialog = true
+        },
+        containerColor = Cyan400,
+        contentColor = Slate950,
+        shape = CircleShape,
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 20.dp, bottom = 24.dp)
+            .size(56.dp)
+            .testTag("add_contact_button")
+    ) {
+        Icon(
+            imageVector = Icons.Default.PersonAdd,
+            contentDescription = "New Contact",
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
     // Smart Call Dialog
     callDialogTarget?.let { (name, phone) ->
         SmartCallOptionDialog(
@@ -448,7 +427,6 @@ fun ContactsScreen(
             containerColor = Slate900
         )
     }
-    }
 }
 
 @Composable
@@ -491,27 +469,17 @@ fun AdvancedContactListItem(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
+                val isRegistered = remember(contact.phone, contact.isRegisteredOnNillBook) {
+                    contact.isRegisteredOnNillBook || NillBookRepository.isUserRegistered(contact.phone)
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = contact.name,
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (contact.group != ContactGroup.ALL) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(color = Slate800, shape = RoundedCornerShape(4.dp)) {
-                                Text(
-                                    text = contact.group.label,
-                                    color = Cyan400,
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                )
-                            }
-                        }
-                    }
+                    Text(
+                        text = contact.name,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = contact.phone,
@@ -519,6 +487,65 @@ fun AdvancedContactListItem(
                         fontSize = 13.sp,
                         fontFamily = FontFamily.Monospace
                     )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (isRegistered) {
+                            Surface(
+                                color = Cyan400.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Cyan400.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Verified, contentDescription = null, tint = Cyan400, modifier = Modifier.size(10.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("NillBook User", color = Cyan400, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Surface(
+                                color = Amber400.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Amber400.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.SimCard, contentDescription = null, tint = Amber400, modifier = Modifier.size(10.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Phone Contact (SIM)", color = Amber400, fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+
+                        if (contact.group != ContactGroup.ALL) {
+                            Surface(color = Slate800, shape = RoundedCornerShape(4.dp)) {
+                                Text(
+                                    text = contact.group.label,
+                                    color = Slate300,
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (!contact.address.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "📍 ${contact.address}",
+                            color = Slate500,
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
 
                 // Favorite Star
@@ -673,6 +700,44 @@ fun AdvancedContactFormDialog(
                     ),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Address (Optional)", color = Slate400) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Cyan400,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedContainerColor = Slate950,
+                        unfocusedContainerColor = Slate950
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_contact_address")
+                )
+
+                OutlinedTextField(
+                    value = birthday,
+                    onValueChange = { birthday = it },
+                    label = { Text("Date of Birth (Optional, e.g. YYYY-MM-DD)", color = Slate400) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Cyan400,
+                        unfocusedBorderColor = Slate700,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedContainerColor = Slate950,
+                        unfocusedContainerColor = Slate950
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_contact_birthday")
                 )
 
                 // Contact Group Selection
