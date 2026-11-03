@@ -46,32 +46,16 @@ object LocalStorageManager {
         val mediaDir = File(context.filesDir, "nillbook_media")
         if (!mediaDir.exists()) {
             mediaDir.mkdirs()
-            // Populate sample locally cached attachments if directory was just created
-            createSampleLocalMedia(context)
         }
+        // Clean any old demo files if they exist
+        try {
+            File(mediaDir, "Voice_Note_Rahim_Bhai.m4a").takeIf { it.exists() }?.delete()
+            File(mediaDir, "Contacts_Export_List.vcf").takeIf { it.exists() }?.delete()
+            File(mediaDir, "NillBook_Project_Brief.pdf").takeIf { it.exists() }?.delete()
+        } catch (_: Exception) {}
+
         refreshMediaList(context)
         checkExistingBackups(context)
-    }
-
-    private fun createSampleLocalMedia(context: Context) {
-        val mediaDir = File(context.filesDir, "nillbook_media")
-        try {
-            // Sample PDF Document
-            val pdfFile = File(mediaDir, "NillBook_Project_Brief.pdf")
-            if (!pdfFile.exists()) {
-                pdfFile.writeText("Nill Book verified communication and contact management summary.")
-            }
-            // Sample Audio Note
-            val voiceFile = File(mediaDir, "Voice_Note_Rahim_Bhai.m4a")
-            if (!voiceFile.exists()) {
-                voiceFile.writeText("Voice note audio stream data placeholder.")
-            }
-            // Sample Document
-            val docFile = File(mediaDir, "Contacts_Export_List.vcf")
-            if (!docFile.exists()) {
-                docFile.writeText("BEGIN:VCARD\nVERSION:3.0\nFN:Rahim Bhai\nTEL:+8801700000000\nEND:VCARD")
-            }
-        } catch (_: Exception) {}
     }
 
     fun refreshMediaList(context: Context) {

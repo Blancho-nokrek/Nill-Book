@@ -2,17 +2,23 @@ package com.example.data
 
 object PhoneUtils {
     val COUNTRIES = listOf(
-        Country("BD", "Bangladesh (+880)", "+880"),
-        Country("IN", "India (+91)", "+91"),
-        Country("PK", "Pakistan (+92)", "+92"),
-        Country("NP", "Nepal (+977)", "+977"),
-        Country("LK", "Sri Lanka (+94)", "+94"),
-        Country("AE", "UAE (+971)", "+971"),
-        Country("SA", "Saudi Arabia (+966)", "+966"),
-        Country("MY", "Malaysia (+60)", "+60"),
-        Country("SG", "Singapore (+65)", "+65"),
-        Country("GB", "United Kingdom (+44)", "+44"),
-        Country("US", "United States (+1)", "+1")
+        Country("BD", "Bangladesh (+880)", "+880", "🇧🇩"),
+        Country("IN", "India (+91)", "+91", "🇮🇳"),
+        Country("PK", "Pakistan (+92)", "+92", "🇵🇰"),
+        Country("SA", "Saudi Arabia (+966)", "+966", "🇸🇦"),
+        Country("AE", "UAE (+971)", "+971", "🇦🇪"),
+        Country("QA", "Qatar (+974)", "+974", "🇶🇦"),
+        Country("KW", "Kuwait (+965)", "+965", "🇰🇼"),
+        Country("OM", "Oman (+968)", "+968", "🇴🇲"),
+        Country("MY", "Malaysia (+60)", "+60", "🇲🇾"),
+        Country("SG", "Singapore (+65)", "+65", "🇸🇬"),
+        Country("NP", "Nepal (+977)", "+977", "🇳🇵"),
+        Country("LK", "Sri Lanka (+94)", "+94", "🇱🇰"),
+        Country("GB", "United Kingdom (+44)", "+44", "🇬🇧"),
+        Country("US", "United States (+1)", "+1", "🇺🇸"),
+        Country("CA", "Canada (+1)", "+1", "🇨🇦"),
+        Country("AU", "Australia (+61)", "+61", "🇦🇺"),
+        Country("IT", "Italy (+39)", "+39", "🇮🇹")
     )
 
     val MONTHS = listOf(
@@ -38,7 +44,7 @@ object PhoneUtils {
         return "${country.dialCode}$national"
     }
 
-    // Ported from lib/mask.ts: "+8801700000000" -> "+880 ••••••••00"
+    // E164 masking: "+8801712345678" -> "+880 ••••••••78"
     fun maskNumber(e164: String): String {
         if (!e164.startsWith("+")) return "••••••••"
         // Find matching dial code

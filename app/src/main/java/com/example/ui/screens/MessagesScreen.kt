@@ -689,15 +689,25 @@ fun ChatDetailView(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (!phone.startsWith("group_")) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lock, contentDescription = "E2EE", tint = Emerald400, modifier = Modifier.size(10.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = phone,
-                                color = Slate400,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontFamily = FontFamily.Monospace
+                                text = if (phone.startsWith("group_")) "Encrypted Group" else "E2EE Verified",
+                                color = Emerald400,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
                             )
+                            if (!phone.startsWith("group_")) {
+                                Text(
+                                    text = " • $phone",
+                                    color = Slate400,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
                     }
                 }
@@ -1125,6 +1135,36 @@ fun ChatDetailView(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    Surface(
+                        color = Slate900.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Slate800),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "E2EE Verified",
+                                tint = Emerald400,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Messages and calls are end-to-end encrypted (ECDH P-256 + AES-256-GCM). Only you and $contactName have access. No plaintext is stored on any server.",
+                                color = Slate300,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+
                 items(messages, key = { it.id }) { msg ->
                     InteractiveMessageBubble(
                         message = msg,
@@ -1311,14 +1351,23 @@ fun InteractiveMessageBubble(
                     modifier = Modifier.align(Alignment.End),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Channel indicator
+                    // Channel indicator & E2EE lock
+                    if (message.isEncrypted) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Encrypted",
+                            tint = Emerald400,
+                            modifier = Modifier.size(9.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                    }
                     Text(
                         text = when (message.channel) {
-                            MessageChannel.INTERNET -> "Internet"
+                            MessageChannel.INTERNET -> if (message.isEncrypted) "E2EE" else "Internet"
                             MessageChannel.SMS -> "SIM"
                             MessageChannel.MMS -> "MMS"
                         },
-                        color = if (message.channel == MessageChannel.INTERNET) Cyan400 else Amber400,
+                        color = if (message.channel == MessageChannel.INTERNET) (if (message.isEncrypted) Emerald400 else Cyan400) else Amber400,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace
                     )

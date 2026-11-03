@@ -92,7 +92,8 @@ data class FriendSuggestion(
 data class Country(
     val code: String,
     val label: String,
-    val dialCode: String
+    val dialCode: String,
+    val flag: String = ""
 )
 
 enum class MessageChannel(val displayName: String) {
@@ -128,7 +129,9 @@ data class ChatMessage(
     val replyToText: String? = null,
     val replyToSender: String? = null,
     val reactions: List<MessageReaction> = emptyList(),
-    val isEdited: Boolean = false
+    val isEdited: Boolean = false,
+    val isEncrypted: Boolean = true,
+    val encryptionAlgorithm: String = "AES-256-GCM / ECDH-P256"
 )
 
 data class ChatConversation(

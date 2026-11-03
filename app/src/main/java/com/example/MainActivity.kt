@@ -42,6 +42,10 @@ import com.example.ui.theme.Emerald400
 import com.example.ui.theme.NillBookTheme
 import com.example.ui.theme.Slate900
 import com.example.ui.theme.Slate950
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.data.security.E2EEMessagingManager
+import com.example.data.security.PermissionManager
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -54,6 +58,10 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Local Storage & Attachment manager
         LocalStorageManager.initialize(this)
+
+        // Initialize Security & End-to-End Encryption Subsystems
+        E2EEMessagingManager.initialize(this)
+        PermissionManager.initialize(this)
 
         // Initialize Android ConnectivityManager NetworkCallback monitor
         NetworkMonitor.startMonitoring(this)
@@ -99,12 +107,33 @@ class MainActivity : ComponentActivity() {
                     conversations.sumOf { it.unreadCount }
                 }
 
+                // System Permission Request on First Launch (Native Android OS pop-up only)
+                val requestPermissionsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions()
+                ) { results ->
+                    PermissionManager.markFirstLaunchPromptCompleted(context)
+                    results.forEach { (perm, granted) ->
+                        if (!granted) {
+                            PermissionManager.setPermissionDeniedByUser(context, perm, true)
+                        }
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    if (!PermissionManager.hasCompletedFirstLaunchPrompt(context)) {
+                        requestPermissionsLauncher.launch(
+                            PermissionManager.getAllRequiredPermissionsArray()
+                        )
+                    }
+                }
+
                 // Automatic online sync without intrusive top notification banners
                 var previousOnlineState by remember { mutableStateOf<Boolean?>(null) }
                 LaunchedEffect(isOnline) {
                     if (previousOnlineState != null && previousOnlineState != isOnline) {
                         if (isOnline) {
                             NillBookRepository.syncOfflineData()
+                            NillBookRepository.syncOfflineMessagesForCurrentUser()
                         }
                     }
                     previousOnlineState = isOnline
@@ -143,8 +172,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Dual UI System: Separate Dedicated Online UI and Offline UI (Switch automatically based on connection)
-                Box(modifier = Modifier.fillMaxSize()) {
+                if (user == null) {
+                    // Mandatory Authentication Gate: User must either log in or create an account to enter
+                    AuthScreen(
+                        onDismiss = { /* Must authenticate to enter */ },
+                        initialMode = "login"
+                    )
+                } else {
+                    // Dual UI System: Separate Dedicated Online UI and Offline UI (Switch automatically based on connection)
+                    Box(modifier = Modifier.fillMaxSize()) {
                     AnimatedContent(
                         targetState = isOnline,
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -357,6 +393,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+
                     // Global Smart Call Dialog: 1. Internet Audio, 2. Internet Video, 3. Normal SIM Call
                     globalCallTarget?.let { (targetName, targetPhone) ->
                         SmartCallOptionDialog(
@@ -399,3 +436,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+}
+
+

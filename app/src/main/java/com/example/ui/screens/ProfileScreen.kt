@@ -61,7 +61,7 @@ fun ProfileScreen(
                 id = targetUserId,
                 name = "Directory User",
                 email = "user@nillbook.com",
-                phone = "+8801700000000",
+                phone = targetUserId.orEmpty(),
                 bio = "NILLBOOK Community Member"
             )
         }

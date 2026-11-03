@@ -381,7 +381,7 @@ fun OfflineDashboardScreen(
 fun OfflineTopBar(
     networkState: NetworkState,
     pendingCount: Int,
-    onToggleSimulation: () -> Unit
+    onToggleSimulation: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
@@ -390,119 +390,54 @@ fun OfflineTopBar(
         color = Slate900,
         tonalElevation = 6.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Title and branding
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Amber400),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.SignalCellularAlt, contentDescription = null, tint = Slate950, modifier = Modifier.size(20.dp))
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = LanguageManager.t("app_name"),
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            text = "OFFLINE SIM MODE",
-                            color = Amber400,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                }
-
-                // Action button: Switch to Online Simulator
-                Surface(
+            // Title and branding
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onToggleSimulation() }
-                        .testTag("simulate_online_button"),
-                    color = Cyan400.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan400.copy(alpha = 0.4f))
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Amber400),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Wifi, contentDescription = null, tint = Cyan400, modifier = Modifier.size(13.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            "Simulate Online",
-                            color = Cyan400,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Icon(Icons.Default.SignalCellularAlt, contentDescription = null, tint = Slate950, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = LanguageManager.t("app_name"),
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "OFFLINE SIM MODE",
+                        color = Amber400,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Prominent Offline Status Banner
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Amber950.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(8.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Amber400.copy(alpha = 0.35f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            if (pendingCount > 0) {
+                Surface(
+                    color = Amber400,
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Amber400)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "No Internet Connection • Cellular SIM & Local Mode Active",
-                            color = Amber200,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    if (pendingCount > 0) {
-                        Surface(
-                            color = Amber400,
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = "$pendingCount pending",
-                                color = Slate950,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "$pendingCount pending",
+                        color = Slate950,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
                 }
             }
         }
